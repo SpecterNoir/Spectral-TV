@@ -64,7 +64,6 @@ public class CatalogController : ControllerBase
                     BaseItemKind.Season,
                     BaseItemKind.Episode,
                     BaseItemKind.Movie,
-                    BaseItemKind.MusicVideo,
                     BaseItemKind.Video
                 },
             OrderBy = new[] { (ItemSortBy.SortName, Jellyfin.Database.Implementations.Enums.SortOrder.Ascending) }
@@ -101,7 +100,7 @@ public class CatalogController : ControllerBase
     }
 
     /// <summary>
-    /// Browses library items by tag for AI lineup generation.
+    /// Browses TV and movie library items by tag for AI lineup generation.
     /// </summary>
     [HttpGet("browse")]
     public ActionResult<object> Browse(
@@ -113,9 +112,15 @@ public class CatalogController : ControllerBase
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        var requestedType = contentType ?? ChannelContentType.TvShow;
+        if (requestedType is not ChannelContentType.TvShow and not ChannelContentType.Movie)
+        {
+            return BadRequest(new { message = "Spectral TV supports TV and movie catalogs only." });
+        }
+
         var channel = new Channel
         {
-            ContentType = contentType ?? ChannelContentType.TvShow,
+            ContentType = requestedType,
             FilterJson = string.IsNullOrWhiteSpace(tag)
                 ? null
                 : SpectralTvJson.Serialize(new { tags = new[] { tag } }),
@@ -123,6 +128,11 @@ public class CatalogController : ControllerBase
         };
 
         var mode = JellyfinCatalogService.ResolveCatalogMode(channel);
+        if (mode == ChannelCatalogMode.MusicVideoOnly)
+        {
+            return BadRequest(new { message = "Music-video catalogs are no longer supported by Spectral TV." });
+        }
+
         var items = _catalog.BrowseForAiManifest(channel, mode, Math.Clamp(limit, 1, 500));
         return Ok(new
         {
@@ -154,15 +164,12 @@ public class CatalogController : ControllerBase
         {
             ChannelContentType.TvShow => new[] { BaseItemKind.Series, BaseItemKind.Season, BaseItemKind.Episode },
             ChannelContentType.Movie => new[] { BaseItemKind.Movie },
-            ChannelContentType.MusicVideo => new[] { BaseItemKind.MusicVideo, BaseItemKind.Video },
-            ChannelContentType.Music => new[] { BaseItemKind.Audio },
             _ => new[]
             {
                 BaseItemKind.Series,
                 BaseItemKind.Season,
                 BaseItemKind.Episode,
                 BaseItemKind.Movie,
-                BaseItemKind.MusicVideo,
                 BaseItemKind.Video
             }
         };
