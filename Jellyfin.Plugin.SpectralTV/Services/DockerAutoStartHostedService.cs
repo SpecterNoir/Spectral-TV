@@ -7,6 +7,7 @@ namespace Jellyfin.Plugin.SpectralTV.Services;
 
 /// <summary>
 /// Optionally pre-starts Playwright and WeatherStar Docker containers when Jellyfin boots.
+/// All failures are contained so optional Spectral TV integrations can never stop Jellyfin startup.
 /// </summary>
 public sealed class DockerAutoStartHostedService : IHostedService
 {
@@ -23,6 +24,8 @@ public sealed class DockerAutoStartHostedService : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        // Intentionally detached. WarmUpAsync contains a top-level exception boundary so no
+        // plugin sidecar failure can fault the Jellyfin host or become an unobserved task failure.
         _ = WarmUpAsync(cancellationToken);
         return Task.CompletedTask;
     }
@@ -30,6 +33,24 @@ public sealed class DockerAutoStartHostedService : IHostedService
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     private async Task WarmUpAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await WarmUpCoreAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug("SpectralTV optional Docker warm-up was canceled during Jellyfin shutdown.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "SpectralTV optional Docker warm-up failed. Jellyfin startup and core Spectral TV features will continue.");
+        }
+    }
+
+    private async Task WarmUpCoreAsync(CancellationToken cancellationToken)
     {
         var config = Plugin.Instance?.Configuration;
         if (config is null)
@@ -42,14 +63,7 @@ public sealed class DockerAutoStartHostedService : IHostedService
             return;
         }
 
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
+        await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
 
         using var scope = _scopeFactory.CreateScope();
         var playwrightDocker = scope.ServiceProvider.GetRequiredService<PlaywrightDockerBrowserService>();
