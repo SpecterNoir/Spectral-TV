@@ -1,0 +1,148 @@
+<div id="SpectralTVChannelStudioPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select" data-controller="__plugin/SpectralTV_channelStudio.js">
+    <style>
+        #SpectralTVChannelStudioPage {
+            --cs-red:#ef4444; --cs-red-dark:#991b1b; --cs-blue:#38bdf8; --cs-green:#4ade80;
+            --cs-panel:rgba(255,255,255,.045); --cs-panel-2:rgba(255,255,255,.075);
+            --cs-border:rgba(255,255,255,.12); --cs-muted:rgba(255,255,255,.68);
+        }
+        #SpectralTVChannelStudioPage *{box-sizing:border-box}
+        #SpectralTVChannelStudioPage .cs-shell{max-width:1260px;margin:0 auto;padding:1.6rem 1.2rem 5rem}
+        #SpectralTVChannelStudioPage .cs-hero{padding:1.2rem 1.25rem;border:1px solid var(--cs-border);border-radius:16px;background:linear-gradient(135deg,rgba(239,68,68,.14),rgba(56,189,248,.06));margin-bottom:1rem}
+        #SpectralTVChannelStudioPage h1,#SpectralTVChannelStudioPage h2,#SpectralTVChannelStudioPage h3,#SpectralTVChannelStudioPage p{margin-top:0}
+        #SpectralTVChannelStudioPage h1{margin-bottom:.25rem;font-size:2rem}
+        #SpectralTVChannelStudioPage .cs-muted{color:var(--cs-muted)}
+        #SpectralTVChannelStudioPage .cs-mode-tabs{display:flex;gap:.55rem;flex-wrap:wrap;margin:1rem 0}
+        #SpectralTVChannelStudioPage .cs-mode{border:1px solid var(--cs-border);border-radius:999px;padding:.65rem 1rem;background:var(--cs-panel);color:inherit;cursor:pointer;font-weight:700}
+        #SpectralTVChannelStudioPage .cs-mode.is-active{border-color:var(--cs-red);background:rgba(239,68,68,.14)}
+        #SpectralTVChannelStudioPage .cs-panel{display:none}
+        #SpectralTVChannelStudioPage .cs-panel.is-active{display:block}
+        #SpectralTVChannelStudioPage .cs-card{border:1px solid var(--cs-border);border-radius:15px;padding:1.1rem 1.2rem;background:var(--cs-panel);margin:1rem 0}
+        #SpectralTVChannelStudioPage .cs-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:.9rem}
+        #SpectralTVChannelStudioPage .cs-card-head p{margin:0;color:var(--cs-muted);line-height:1.45}
+        #SpectralTVChannelStudioPage .cs-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem}
+        #SpectralTVChannelStudioPage .cs-grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+        #SpectralTVChannelStudioPage .cs-field{display:grid;gap:.35rem;min-width:0}
+        #SpectralTVChannelStudioPage .cs-field>span{font-size:.82rem;font-weight:700;color:var(--cs-muted)}
+        #SpectralTVChannelStudioPage .cs-full{grid-column:1/-1}
+        #SpectralTVChannelStudioPage .cs-check{display:flex;align-items:flex-start;gap:.6rem;padding:.7rem;border:1px solid var(--cs-border);border-radius:10px;background:rgba(0,0,0,.12)}
+        #SpectralTVChannelStudioPage .cs-check strong,#SpectralTVChannelStudioPage .cs-check small{display:block}
+        #SpectralTVChannelStudioPage .cs-check small{color:var(--cs-muted);margin-top:.12rem}
+        #SpectralTVChannelStudioPage .cs-actions{display:flex;gap:.55rem;flex-wrap:wrap;align-items:center;margin-top:.85rem}
+        #SpectralTVChannelStudioPage .cs-button{border:1px solid var(--cs-border);border-radius:10px;padding:.58rem .8rem;background:var(--cs-panel-2);color:inherit;cursor:pointer;font-weight:700}
+        #SpectralTVChannelStudioPage .cs-button-primary{background:linear-gradient(135deg,var(--cs-red),var(--cs-red-dark));border-color:transparent;color:#fff}
+        #SpectralTVChannelStudioPage .cs-button-danger{border-color:rgba(239,68,68,.35);color:#fecaca;background:rgba(127,29,29,.22)}
+        #SpectralTVChannelStudioPage .cs-button-small{padding:.4rem .58rem;font-size:.78rem}
+        #SpectralTVChannelStudioPage .cs-note{padding:.75rem .9rem;border-left:3px solid var(--cs-blue);border-radius:0 9px 9px 0;background:rgba(56,189,248,.08);color:var(--cs-muted);line-height:1.45}
+        #SpectralTVChannelStudioPage .cs-search-wrap{position:relative}
+        #SpectralTVChannelStudioPage .cs-results{display:none;position:absolute;z-index:20;top:calc(100% + .3rem);left:0;right:0;max-height:320px;overflow:auto;padding:.35rem;border:1px solid var(--cs-border);border-radius:10px;background:#17191d;box-shadow:0 20px 45px rgba(0,0,0,.45)}
+        #SpectralTVChannelStudioPage .cs-results.has-results{display:grid;gap:.2rem}
+        #SpectralTVChannelStudioPage .cs-result{width:100%;border:0;border-radius:8px;background:transparent;color:inherit;padding:.65rem;text-align:left;cursor:pointer}
+        #SpectralTVChannelStudioPage .cs-result:hover{background:var(--cs-panel-2)}
+        #SpectralTVChannelStudioPage .cs-list{display:grid;gap:.55rem;margin-top:.85rem}
+        #SpectralTVChannelStudioPage .cs-row{display:grid;grid-template-columns:minmax(180px,1fr) 110px 125px 125px auto;gap:.6rem;align-items:center;padding:.72rem;border:1px solid var(--cs-border);border-radius:11px;background:rgba(0,0,0,.12)}
+        #SpectralTVChannelStudioPage .cs-row-title{min-width:0}
+        #SpectralTVChannelStudioPage .cs-row-title strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        #SpectralTVChannelStudioPage .cs-row-title small{color:var(--cs-muted)}
+        #SpectralTVChannelStudioPage .cs-empty{padding:1rem;border:1px dashed var(--cs-border);border-radius:10px;color:var(--cs-muted);text-align:center}
+        #SpectralTVChannelStudioPage .cs-preview{display:grid;gap:.45rem;margin-top:.75rem}
+        #SpectralTVChannelStudioPage .cs-preview-item{display:flex;gap:.65rem;align-items:center;padding:.62rem .72rem;border-radius:9px;background:rgba(0,0,0,.13)}
+        #SpectralTVChannelStudioPage .cs-preview-kind{min-width:4.9rem;text-transform:uppercase;font-size:.68rem;font-weight:800;color:var(--cs-muted)}
+        #SpectralTVChannelStudioPage .cs-preview-item.is-program{border-left:3px solid var(--cs-green)}
+        #SpectralTVChannelStudioPage .cs-toast{position:fixed;right:1rem;bottom:1rem;z-index:100;max-width:420px;padding:.8rem 1rem;border:1px solid var(--cs-border);border-radius:11px;background:#181a1f;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+        #SpectralTVChannelStudioPage .cs-hidden{display:none!important}
+        #SpectralTVChannelStudioPage details{margin-top:.85rem}
+        #SpectralTVChannelStudioPage summary{cursor:pointer;color:var(--cs-muted);font-weight:700}
+        @media(max-width:900px){#SpectralTVChannelStudioPage .cs-row{grid-template-columns:1fr 1fr}#SpectralTVChannelStudioPage .cs-row-title{grid-column:1/-1}#SpectralTVChannelStudioPage .cs-grid-3{grid-template-columns:1fr 1fr}}
+        @media(max-width:620px){#SpectralTVChannelStudioPage .cs-shell{padding:.75rem .6rem 3rem}#SpectralTVChannelStudioPage .cs-grid,#SpectralTVChannelStudioPage .cs-grid-3{grid-template-columns:1fr}#SpectralTVChannelStudioPage .cs-full{grid-column:auto}#SpectralTVChannelStudioPage .cs-row{grid-template-columns:1fr}}
+    </style>
+
+    <div class="cs-shell">
+        <header class="cs-hero">
+            <h1>Channel Studio</h1>
+            <p class="cs-muted">Build channels around content rules instead of manually filling every time slot.</p>
+        </header>
+
+        <div class="cs-mode-tabs" role="tablist">
+            <button type="button" class="cs-mode is-active" data-cs-mode="live">Live automatic channels</button>
+            <button type="button" class="cs-mode" data-cs-mode="ondemand">On-demand channels</button>
+        </div>
+
+        <section id="cs-panel-live" class="cs-panel is-active">
+            <div class="cs-card">
+                <div class="cs-card-head"><div><h2>Automatic live rotation</h2><p>Pick a list of shows and let Spectral TV continuously generate the channel. Fixed time slots remain optional in the main Spectral TV page.</p></div></div>
+                <div class="cs-grid">
+                    <label class="cs-field"><span>Live channel</span><select id="cs-live-channel" class="emby-select"></select></label>
+                    <label class="cs-field"><span>How should the next show be chosen?</span><select id="cs-live-selection" class="emby-select"><option value="0">Balanced — roughly equal airtime</option><option value="1">Weighted — follow each source's share</option><option value="2">Random — any source can play next</option></select></label>
+                    <label class="cs-check"><input id="cs-live-enabled" type="checkbox"><span><strong>Use automatic rotation</strong><small>When enabled, you do not need to fill the schedule grid.</small></span></label>
+                </div>
+                <div class="cs-actions"><button id="cs-live-save" type="button" class="cs-button cs-button-primary">Save automatic mode</button><button id="cs-live-rebuild" type="button" class="cs-button">Rebuild live channel</button></div>
+            </div>
+
+            <div class="cs-card">
+                <div class="cs-card-head"><div><h2>Live programming pool</h2><p>Show selection and episode selection are separate. You can pick shows randomly while keeping each show's episodes sequential.</p></div></div>
+                <div class="cs-grid cs-grid-3">
+                    <div class="cs-field cs-search-wrap"><span>Search Jellyfin</span><input id="cs-live-search" class="emby-input" type="search" autocomplete="off" placeholder="Naruto, Bleach, a movie…"><div id="cs-live-results" class="cs-results"></div></div>
+                    <label class="cs-field"><span>Share / weight</span><input id="cs-live-weight" class="emby-input" type="number" min="0.1" step="0.1" value="25"></label>
+                    <label class="cs-field"><span>Episode order</span><select id="cs-live-order" class="emby-select"><option value="0">Sequential</option><option value="1">Random episodes</option></select></label>
+                </div>
+                <p class="cs-note">Example: choose <strong>Random</strong> above, then keep Naruto and Bleach set to <strong>Sequential</strong>. The next show is unpredictable, but each show still advances in story order.</p>
+                <div id="cs-live-sources" class="cs-list"></div>
+            </div>
+        </section>
+
+        <section id="cs-panel-ondemand" class="cs-panel">
+            <div class="cs-card">
+                <div class="cs-card-head"><div><h2>On-demand channel recipe</h2><p>A resumable smart playlist. Each show keeps its own episode progress while the rotation rule decides whose turn comes next.</p></div><button id="cs-od-new" type="button" class="cs-button cs-button-primary cs-button-small">+ New</button></div>
+                <div class="cs-grid">
+                    <label class="cs-field"><span>On-demand channel</span><select id="cs-od-channel" class="emby-select"></select></label>
+                    <label class="cs-field"><span>Name</span><input id="cs-od-name" class="emby-input" type="text" placeholder="Toonami"></label>
+                    <label class="cs-field"><span>Programming style</span><select id="cs-od-programming-mode" class="emby-select"><option value="0">Dynamic sources</option><option value="1">Fixed sequence</option></select></label>
+                    <label class="cs-field"><span>Rotation</span><select id="cs-od-rotation" class="emby-select"><option value="0">Alternating — A, B, A, B</option><option value="1">Blocks — A×N, B×N</option><option value="2">Balanced random</option><option value="3">Weighted random</option><option value="4">Fully random</option><option value="5">Shuffle cycle</option><option value="6">Custom pattern</option></select></label>
+                    <label class="cs-check"><input id="cs-od-enabled" type="checkbox" checked><span><strong>Channel enabled</strong><small>Disabled recipes stay saved but cannot generate playback.</small></span></label>
+                </div>
+                <details><summary>Custom pattern</summary><div class="cs-grid" style="margin-top:.75rem"><label class="cs-field cs-full"><span>Source numbers, comma-separated</span><input id="cs-od-pattern" class="emby-input" type="text" placeholder="1, 1, 2, 3, 2"><small class="cs-muted">Sources are numbered in the order shown below. Repeating a number repeats that source in the pattern.</small></label></div></details>
+                <div class="cs-actions"><button id="cs-od-save" type="button" class="cs-button cs-button-primary">Save recipe</button><button id="cs-od-delete" type="button" class="cs-button cs-button-danger">Delete</button></div>
+            </div>
+
+            <div class="cs-card">
+                <div class="cs-card-head"><div><h2>Programming sources</h2><p>Add entire shows for linked episode progress, or exact episodes/movies when you want a fixed sequence.</p></div></div>
+                <div class="cs-grid cs-grid-3">
+                    <div class="cs-field cs-search-wrap"><span>Search Jellyfin</span><input id="cs-od-search" class="emby-input" type="search" autocomplete="off" placeholder="Naruto, Bleach, episode, movie…"><div id="cs-od-results" class="cs-results"></div></div>
+                    <label class="cs-field"><span>Weight</span><input id="cs-od-weight" class="emby-input" type="number" min="1" max="1000" value="1"></label>
+                    <label class="cs-field"><span>Episodes per turn</span><input id="cs-od-block" class="emby-input" type="number" min="1" max="100" value="1"></label>
+                    <label class="cs-field"><span>Episode order</span><select id="cs-od-order" class="emby-select"><option value="0">Sequential</option><option value="1">Random episodes</option></select></label>
+                </div>
+                <div id="cs-od-sources" class="cs-list"></div>
+            </div>
+
+            <div class="cs-card">
+                <div class="cs-card-head"><div><h2>Promos &amp; interstitials</h2><p>These are generated around programs automatically and do not become part of episode progress.</p></div></div>
+                <div class="cs-grid">
+                    <label class="cs-check"><input id="cs-od-filler-enabled" type="checkbox" checked><span><strong>Use promos / bumpers</strong><small>Turn off for uninterrupted playback.</small></span></label>
+                    <label class="cs-check"><input id="cs-od-before" type="checkbox" checked><span><strong>Before the first program</strong><small>Useful for a Toonami-style intro.</small></span></label>
+                    <label class="cs-check"><input id="cs-od-between" type="checkbox" checked><span><strong>Between programs</strong><small>Insert automatically after each completed main program.</small></span></label>
+                    <label class="cs-check"><input id="cs-od-switch-only" type="checkbox"><span><strong>Only when switching shows</strong><small>Useful for block programming.</small></span></label>
+                    <label class="cs-field"><span>Minimum clips</span><input id="cs-od-filler-min" class="emby-input" type="number" min="0" max="10" value="1"></label>
+                    <label class="cs-field"><span>Maximum clips</span><input id="cs-od-filler-max" class="emby-input" type="number" min="0" max="10" value="1"></label>
+                    <label class="cs-field"><span>No-repeat window</span><input id="cs-od-filler-repeat" class="emby-input" type="number" min="0" max="100" value="10"></label>
+                </div>
+                <div class="cs-grid cs-grid-3" style="margin-top:1rem">
+                    <div class="cs-field cs-search-wrap"><span>Search promo / bumper</span><input id="cs-od-filler-search" class="emby-input" type="search" autocomplete="off" placeholder="Toonami promo…"><div id="cs-od-filler-results" class="cs-results"></div></div>
+                    <label class="cs-field"><span>Clip type</span><select id="cs-od-filler-kind" class="emby-select"><option value="0">Promo</option><option value="1">Bumper</option><option value="2">Commercial</option><option value="3">Station ID</option></select></label>
+                    <label class="cs-field"><span>Selection weight</span><input id="cs-od-filler-weight" class="emby-input" type="number" min="1" max="1000" value="1"></label>
+                </div>
+                <div id="cs-od-fillers" class="cs-list"></div>
+            </div>
+
+            <div class="cs-card">
+                <div class="cs-card-head"><div><h2>Sequence preview</h2><p>Preview the recipe without changing anyone's progress. The test controls below also exercise the resumable progress engine.</p></div></div>
+                <div class="cs-actions"><button id="cs-od-preview" type="button" class="cs-button cs-button-primary">Preview next 12 programs</button><input id="cs-od-progress-key" class="emby-input" type="text" value="test" style="max-width:180px" aria-label="Test progress key"><button id="cs-od-resume" type="button" class="cs-button">Start / resume test</button><button id="cs-od-next" type="button" class="cs-button">Complete &amp; next</button><button id="cs-od-reset" type="button" class="cs-button cs-button-danger">Reset test progress</button></div>
+                <div id="cs-od-preview-list" class="cs-preview"></div>
+            </div>
+
+            <p class="cs-note"><strong>Viewer integration is the next layer.</strong> This build creates the on-demand recipe and per-user progress engine first. The eventual Jellyfin viewing surface will use the logged-in Jellyfin user ID automatically; users will not type progress keys.</p>
+        </section>
+    </div>
+
+    <div id="cs-toast" class="cs-toast cs-hidden" role="status" aria-live="polite"></div>
+</div>
