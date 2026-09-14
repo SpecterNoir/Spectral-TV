@@ -13,6 +13,7 @@ public class LineupGeneratorService
     private readonly CommercialService _commercialService;
     private readonly ChannelService _channelService;
     private readonly HolidayChannelService _holidays;
+    private readonly WeightedProgrammingService _weightedProgramming;
 
     public LineupGeneratorService(
         FinTvDbContext db,
@@ -20,7 +21,8 @@ public class LineupGeneratorService
         SmartSelectionService smartSelection,
         CommercialService commercialService,
         ChannelService channelService,
-        HolidayChannelService holidays)
+        HolidayChannelService holidays,
+        WeightedProgrammingService weightedProgramming)
     {
         _db = db;
         _lineupService = lineupService;
@@ -28,6 +30,7 @@ public class LineupGeneratorService
         _commercialService = commercialService;
         _channelService = channelService;
         _holidays = holidays;
+        _weightedProgramming = weightedProgramming;
     }
 
     public async Task BuildPlayoutAsync(
@@ -40,6 +43,12 @@ public class LineupGeneratorService
         if (channel.ContentType == ChannelContentType.Weather)
         {
             await BuildWeatherPlayoutAsync(channel, startUtc, endUtc, mode, cancellationToken);
+            return;
+        }
+
+        if (await _weightedProgramming.IsEnabledAsync(channel.Id, cancellationToken))
+        {
+            await _weightedProgramming.BuildPlayoutAsync(channel, startUtc, endUtc, mode, cancellationToken);
             return;
         }
 
