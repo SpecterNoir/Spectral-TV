@@ -1,6 +1,7 @@
 using Jellyfin.Plugin.SpectralTV.Data;
 using Jellyfin.Plugin.SpectralTV.Domain;
 using Jellyfin.Plugin.SpectralTV.Services;
+using Jellyfin.Data.Enums;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
@@ -105,7 +106,7 @@ public class ProgrammingController : ControllerBase
 
         if (!IsSupportedProgramItem(item))
         {
-            return BadRequest(new { message = "Programming sources must be a series, season, episode, movie, or music video." });
+            return BadRequest(new { message = "Programming sources must be a series, season, episode, or movie." });
         }
 
         if (await _db.ChannelProgramSources.AnyAsync(
@@ -183,9 +184,16 @@ public class ProgrammingController : ControllerBase
             return BadRequest(new { message = "The selected Jellyfin item no longer exists." });
         }
 
-        if (item is Series || item is Season)
+        if (!IsSupportedFillerItem(item))
         {
-            return BadRequest(new { message = "Promos and bumpers must be individual playable media items." });
+            return BadRequest(new { message = "Break clips must be individual playable videos." });
+        }
+
+        if (await _db.ChannelFillerSources.AnyAsync(
+            source => source.ChannelId == channelId && source.JellyfinItemId == request.JellyfinItemId,
+            cancellationToken))
+        {
+            return BadRequest(new { message = "That clip is already in this channel's break library." });
         }
 
         var nextOrder = (await _db.ChannelFillerSources
@@ -287,7 +295,10 @@ public class ProgrammingController : ControllerBase
     }
 
     private static bool IsSupportedProgramItem(BaseItem item)
-        => item is Series or Season or Episode or Movie || item.GetBaseItemKind().ToString() == "MusicVideo";
+        => item is Series or Season or Episode or Movie;
+
+    private static bool IsSupportedFillerItem(BaseItem item)
+        => item.GetBaseItemKind() is BaseItemKind.Episode or BaseItemKind.Movie or BaseItemKind.Video;
 
     private static int? GetRuntimeMinutes(BaseItem? item)
         => item?.RunTimeTicks is long ticks ? (int)Math.Round(TimeSpan.FromTicks(ticks).TotalMinutes) : null;

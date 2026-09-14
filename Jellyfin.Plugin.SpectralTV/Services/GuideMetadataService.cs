@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Security;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
@@ -52,8 +51,6 @@ public class GuideMetadataService
         {
             Episode episode => BuildEpisodeMetadata(episode),
             Movie movie => BuildMovieMetadata(movie),
-            MusicVideo musicVideo => BuildMusicVideoMetadata(musicVideo),
-            Audio audio => BuildAudioMetadata(audio),
             _ => new GuideProgramMetadata
             {
                 Title = item.Name,
@@ -231,31 +228,6 @@ public class GuideMetadataService
             ProductionYear = movie.ProductionYear,
             OfficialRating = movie.OfficialRating,
             PosterItemId = movie.HasImage(ImageType.Primary) ? movie.Id : null
-        };
-    }
-
-    private static GuideProgramMetadata BuildMusicVideoMetadata(MusicVideo musicVideo)
-    {
-        var categories = musicVideo.Genres.Where(g => !string.IsNullOrWhiteSpace(g)).ToList();
-        return new GuideProgramMetadata
-        {
-            Title = musicVideo.Name,
-            Description = TruncateOverview(musicVideo.Overview),
-            Categories = categories,
-            ProductionYear = musicVideo.ProductionYear,
-            PosterItemId = musicVideo.HasImage(ImageType.Primary) ? musicVideo.Id : null
-        };
-    }
-
-    private static GuideProgramMetadata BuildAudioMetadata(Audio audio)
-    {
-        return new GuideProgramMetadata
-        {
-            Title = audio.Name,
-            Description = TruncateOverview(audio.Overview),
-            Categories = audio.Genres.Where(g => !string.IsNullOrWhiteSpace(g)).ToList(),
-            ProductionYear = audio.ProductionYear,
-            PosterItemId = audio.HasImage(ImageType.Primary) ? audio.Id : null
         };
     }
 

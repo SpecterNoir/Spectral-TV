@@ -37,34 +37,11 @@ public class StreamService
         using var streamLease = TrackStream(channelId);
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SpectralTvDbContext>();
-        var catalog = scope.ServiceProvider.GetRequiredService<JellyfinCatalogService>();
-        var weather = scope.ServiceProvider.GetRequiredService<WeatherStarChannelService>();
-        var ebs = scope.ServiceProvider.GetRequiredService<EbsService>();
-        var youtubeCommercials = scope.ServiceProvider.GetRequiredService<YouTubeCommercialStreamService>();
-        var holidays = scope.ServiceProvider.GetRequiredService<HolidayChannelService>();
 
         var channel = await db.Channels.AsNoTracking().FirstOrDefaultAsync(c => c.Id == channelId, cancellationToken);
         if (channel is null)
         {
             throw new InvalidOperationException("Channel not found.");
-        }
-
-        if (channel.ContentType == ChannelContentType.Weather)
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    await weather.StreamAsync(channel, output, cancellationToken);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.LogError(ex, "Weather stream failed for {Channel}; retrying in 5 seconds", channel.Name);
-                    await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-                }
-            }
-
-            return;
         }
 
         var ffmpegPath = _mediaEncoder.EncoderPath;
@@ -76,34 +53,26 @@ public class StreamService
             {
                 try
                 {
-                    if (current.IsVirtual && current.VirtualSource == VirtualContentSource.MusicArtSlide)
+                    if (current.JellyfinItemId.HasValue)
                     {
-                        await StreamMusicItemAsync(channel, current, catalog, ffmpegPath, output, cancellationToken);
-                    }
-                    else if (current.CommercialId.HasValue)
-                    {
-                        await StreamCommercialItemAsync(channel, current, catalog, holidays, youtubeCommercials, ffmpegPath, output, cancellationToken);
-                    }
-                    else if (current.JellyfinItemId.HasValue)
-                    {
-                        await StreamMediaItemAsync(channel, current, catalog, holidays, ffmpegPath, output, cancellationToken);
+                        await StreamMediaItemAsync(channel, current, ffmpegPath, output, cancellationToken);
                     }
                     else
                     {
-                        await WriteEbsAsync(channel, ebs, ffmpegPath, output, 180, cancellationToken);
+                        await WriteFallbackAsync(channel, ffmpegPath, output, 180, cancellationToken);
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Failed streaming item {Title}", current.Title);
-                    await WriteEbsAsync(channel, ebs, ffmpegPath, output, 120, cancellationToken);
+                    await WriteFallbackAsync(channel, ffmpegPath, output, 120, cancellationToken);
                 }
 
                 continue;
             }
 
-            var ebsDuration = await GetEbsDurationSecondsAsync(channelId, cancellationToken);
-            await WriteEbsAsync(channel, ebs, ffmpegPath, output, ebsDuration, cancellationToken);
+            var fallbackDuration = await GetFallbackDurationSecondsAsync(channelId, cancellationToken);
+            await WriteFallbackAsync(channel, ffmpegPath, output, fallbackDuration, cancellationToken);
         }
     }
 
@@ -175,7 +144,7 @@ public class StreamService
         }
     }
 
-    private async Task<double> GetEbsDurationSecondsAsync(Guid channelId, CancellationToken cancellationToken)
+    private async Task<double> GetFallbackDurationSecondsAsync(Guid channelId, CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SpectralTvDbContext>();
@@ -198,8 +167,6 @@ public class StreamService
     private async Task StreamMediaItemAsync(
         Channel channel,
         PlayoutItem item,
-        JellyfinCatalogService catalog,
-        HolidayChannelService holidays,
         string ffmpegPath,
         Stream output,
         CancellationToken cancellationToken)
@@ -212,7 +179,7 @@ public class StreamService
             throw new InvalidOperationException($"Media item {item.JellyfinItemId} not found.");
         }
 
-        var inputPath = catalog.GetMediaPath(mediaItem);
+        var inputPath = mediaItem.Path;
         if (string.IsNullOrWhiteSpace(inputPath) || !File.Exists(inputPath))
         {
             throw new FileNotFoundException($"Media path missing for {item.Title}.");
@@ -220,116 +187,28 @@ public class StreamService
 
         var offset = Math.Max(0, (DateTime.UtcNow - item.Start).TotalSeconds + item.InPoint.TotalSeconds);
         var duration = Math.Max(1, (item.Finish - DateTime.UtcNow).TotalSeconds);
-        var bugPath = ResolveBugPath(channel, item.Start, holidays);
+        var bugPath = ResolveBugPath(channel);
         var args = _ffmpeg.BuildMediaCommand(channel, inputPath, offset, duration, bugPath);
 
         await RunFfmpegToStreamAsync(ffmpegPath, args, output, cancellationToken);
     }
 
-    private async Task StreamCommercialItemAsync(
+    private async Task WriteFallbackAsync(
         Channel channel,
-        PlayoutItem item,
-        JellyfinCatalogService catalog,
-        HolidayChannelService holidays,
-        YouTubeCommercialStreamService youtubeCommercials,
-        string ffmpegPath,
-        Stream output,
-        CancellationToken cancellationToken)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<SpectralTvDbContext>();
-        var commercial = await db.Commercials.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == item.CommercialId, cancellationToken);
-
-        if (commercial is null)
-        {
-            throw new InvalidOperationException($"Commercial {item.CommercialId} not found.");
-        }
-
-        if (commercial.Source == CommercialSource.Jellyfin)
-        {
-            var libraryManager = scope.ServiceProvider.GetRequiredService<ILibraryManager>();
-            var mediaItem = libraryManager.GetItemById(commercial.JellyfinItemId);
-            if (mediaItem is null)
-            {
-                throw new InvalidOperationException($"Media item {commercial.JellyfinItemId} not found.");
-            }
-
-            var inputPath = catalog.GetMediaPath(mediaItem);
-            if (string.IsNullOrWhiteSpace(inputPath) || !File.Exists(inputPath))
-            {
-                throw new FileNotFoundException($"Media path missing for {commercial.Title}.");
-            }
-
-            var offset = Math.Max(0, (DateTime.UtcNow - item.Start).TotalSeconds + item.InPoint.TotalSeconds);
-            var duration = Math.Max(1, (item.Finish - DateTime.UtcNow).TotalSeconds);
-            var bugPath = ResolveBugPath(channel, item.Start, holidays);
-            var args = _ffmpeg.BuildMediaCommand(channel, inputPath, offset, duration, bugPath);
-            await RunFfmpegToStreamAsync(ffmpegPath, args, output, cancellationToken);
-            return;
-        }
-
-        await youtubeCommercials.StreamCommercialAsync(
-            channel,
-            commercial,
-            _ffmpeg,
-            ffmpegPath,
-            Math.Max(1, (item.Finish - DateTime.UtcNow).TotalSeconds),
-            output,
-            cancellationToken);
-    }
-
-    private async Task StreamMusicItemAsync(
-        Channel channel,
-        PlayoutItem item,
-        JellyfinCatalogService catalog,
-        string ffmpegPath,
-        Stream output,
-        CancellationToken cancellationToken)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var libraryManager = scope.ServiceProvider.GetRequiredService<ILibraryManager>();
-        var mediaItem = libraryManager.GetItemById(item.JellyfinItemId!.Value);
-        if (mediaItem is null)
-        {
-            throw new InvalidOperationException($"Music item {item.JellyfinItemId} not found.");
-        }
-
-        var inputPath = catalog.GetMediaPath(mediaItem);
-        if (string.IsNullOrWhiteSpace(inputPath) || !File.Exists(inputPath))
-        {
-            throw new FileNotFoundException($"Music path missing for {item.Title}.");
-        }
-
-        var albumArt = catalog.GetPrimaryImagePath(mediaItem);
-        var args = _ffmpeg.BuildMusicCommand(channel, inputPath, albumArt);
-        await RunFfmpegToStreamAsync(ffmpegPath, args, output, cancellationToken);
-    }
-
-    private async Task WriteEbsAsync(
-        Channel channel,
-        EbsService ebs,
         string ffmpegPath,
         Stream output,
         double durationSeconds,
         CancellationToken cancellationToken)
     {
-        var plan = ebs.CreatePlaybackPlan(channel, durationSeconds);
-        var args = _ffmpeg.BuildEbsCommand(channel, plan);
+        var args = _ffmpeg.BuildFallbackCommand(channel, durationSeconds);
         await RunFfmpegToStreamAsync(ffmpegPath, args, output, cancellationToken);
     }
 
-    private static string? ResolveBugPath(Channel channel, DateTime scheduleUtc, HolidayChannelService holidays)
+    private static string? ResolveBugPath(Channel channel)
     {
         if (channel.BugPlacement == BugPlacementMode.None)
         {
             return null;
-        }
-
-        if (holidays.IsHolidayChannel(channel))
-        {
-            var date = holidays.GetScheduleDateUtc(scheduleUtc);
-            return holidays.ResolveEffectiveLogoPath(channel, date);
         }
 
         return channel.ChannelLogoPath;

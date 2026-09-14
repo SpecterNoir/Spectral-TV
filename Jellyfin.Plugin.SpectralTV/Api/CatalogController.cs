@@ -20,17 +20,14 @@ namespace Jellyfin.Plugin.SpectralTV.Api;
 public class CatalogController : ControllerBase
 {
     private readonly ILibraryManager _libraryManager;
-    private readonly JellyfinCatalogService _catalog;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CatalogController"/> class.
     /// </summary>
     /// <param name="libraryManager">Library manager.</param>
-    /// <param name="catalog">SpectralTV catalog service.</param>
-    public CatalogController(ILibraryManager libraryManager, JellyfinCatalogService catalog)
+    public CatalogController(ILibraryManager libraryManager)
     {
         _libraryManager = libraryManager;
-        _catalog = catalog;
     }
 
     /// <summary>
@@ -39,7 +36,7 @@ public class CatalogController : ControllerBase
     [HttpGet("search")]
     public ActionResult<IEnumerable<object>> Search(
         [FromQuery] string q,
-        [FromQuery] ChannelContentType? contentType,
+        [FromQuery] string purpose = "programming",
         [FromQuery] int limit = 25,
         CancellationToken cancellationToken = default)
     {
@@ -56,17 +53,9 @@ public class CatalogController : ControllerBase
             IsVirtualItem = false,
             SearchTerm = q.Trim(),
             Limit = Math.Clamp(limit, 1, 50),
-            IncludeItemTypes = contentType.HasValue
-                ? GetItemTypes(contentType.Value)
-                : new[]
-                {
-                    BaseItemKind.Series,
-                    BaseItemKind.Season,
-                    BaseItemKind.Episode,
-                    BaseItemKind.Movie,
-                    BaseItemKind.MusicVideo,
-                    BaseItemKind.Video
-                },
+            IncludeItemTypes = purpose.Equals("filler", StringComparison.OrdinalIgnoreCase)
+                ? new[] { BaseItemKind.Episode, BaseItemKind.Movie, BaseItemKind.Video }
+                : new[] { BaseItemKind.Series, BaseItemKind.Season, BaseItemKind.Episode, BaseItemKind.Movie },
             OrderBy = new[] { (ItemSortBy.SortName, Jellyfin.Database.Implementations.Enums.SortOrder.Ascending) }
         };
 
@@ -100,38 +89,6 @@ public class CatalogController : ControllerBase
         return Ok(results);
     }
 
-    /// <summary>
-    /// Browses library items by tag for AI lineup generation.
-    /// </summary>
-    [HttpGet("browse")]
-    public ActionResult<object> Browse(
-        [FromQuery] string? tag,
-        [FromQuery] ChannelContentType? contentType,
-        [FromQuery] ChannelCatalogMode? catalogMode,
-        [FromQuery] int limit = 50,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var channel = new Channel
-        {
-            ContentType = contentType ?? ChannelContentType.TvShow,
-            FilterJson = string.IsNullOrWhiteSpace(tag)
-                ? null
-                : SpectralTvJson.Serialize(new { tags = new[] { tag } }),
-            CatalogMode = catalogMode
-        };
-
-        var mode = JellyfinCatalogService.ResolveCatalogMode(channel);
-        var items = _catalog.BrowseForAiManifest(channel, mode, Math.Clamp(limit, 1, 500));
-        return Ok(new
-        {
-            catalogMode = mode.ToString(),
-            total = items.Count,
-            items = items.Select(MapSearchResult)
-        });
-    }
-
     private static object MapSearchResult(BaseItem item)
     {
         var runtime = item.RunTimeTicks.HasValue
@@ -148,25 +105,6 @@ public class CatalogController : ControllerBase
         };
     }
 
-    private static BaseItemKind[] GetItemTypes(ChannelContentType contentType)
-    {
-        return contentType switch
-        {
-            ChannelContentType.TvShow => new[] { BaseItemKind.Series, BaseItemKind.Season, BaseItemKind.Episode },
-            ChannelContentType.Movie => new[] { BaseItemKind.Movie },
-            ChannelContentType.MusicVideo => new[] { BaseItemKind.MusicVideo, BaseItemKind.Video },
-            ChannelContentType.Music => new[] { BaseItemKind.Audio },
-            _ => new[]
-            {
-                BaseItemKind.Series,
-                BaseItemKind.Season,
-                BaseItemKind.Episode,
-                BaseItemKind.Movie,
-                BaseItemKind.MusicVideo,
-                BaseItemKind.Video
-            }
-        };
-    }
 }
 
 /// <summary>

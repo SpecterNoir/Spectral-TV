@@ -18,6 +18,7 @@ public class ChannelService
     public async Task<List<Channel>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _db.Channels
+            .Where(c => c.ContentType == ChannelContentType.TvShow || c.ContentType == ChannelContentType.Movie)
             .OrderBy(c => c.Number)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -26,6 +27,7 @@ public class ChannelService
     public async Task<Channel?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _db.Channels
+            .Where(c => c.ContentType == ChannelContentType.TvShow || c.ContentType == ChannelContentType.Movie)
             .Include(c => c.DefaultLineup!)
                 .ThenInclude(l => l.Slots)
                 .ThenInclude(s => s.Candidates)
@@ -43,21 +45,30 @@ public class ChannelService
             return null;
         }
 
-        return await _db.Channels.FirstOrDefaultAsync(c => c.Number == normalized && c.Enabled, cancellationToken);
+        return await _db.Channels.FirstOrDefaultAsync(
+            c => c.Number == normalized
+                && c.Enabled
+                && (c.ContentType == ChannelContentType.TvShow || c.ContentType == ChannelContentType.Movie),
+            cancellationToken);
     }
 
     public async Task<Channel> CreateAsync(Channel channel, CancellationToken cancellationToken = default)
     {
         channel.Number = NormalizeChannelNumber(channel.Number);
-        channel.DefaultLineup = new Lineup
+        channel.ContentType = ChannelContentType.TvShow;
+        channel.WeatherLocationQuery = null;
+        _db.Channels.Add(channel);
+        _db.ChannelProgrammingSettings.Add(new ChannelProgrammingSettings
         {
             ChannelId = channel.Id,
-            Name = "Default",
-            IsDefault = true,
-            Slots = CreateEmptySlots()
-        };
-
-        _db.Channels.Add(channel);
+            Enabled = true,
+            FillerEnabled = false,
+            FillerChancePercent = 75,
+            MinFillerItems = 1,
+            MaxFillerItems = 2,
+            MaxFillerSeconds = 180,
+            FillerRepeatWindow = 12
+        });
         await BindChannelLogoAsync(channel, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         return channel;
@@ -74,23 +85,23 @@ public class ChannelService
         existing.Number = NormalizeChannelNumber(updated.Number);
         existing.Name = updated.Name;
         existing.Enabled = updated.Enabled;
-        existing.ContentType = updated.ContentType;
+        existing.ContentType = ChannelContentType.TvShow;
         existing.AspectRatio = updated.AspectRatio;
         existing.ScanlinesEnabled = updated.ScanlinesEnabled;
         existing.LogoSetId = updated.LogoSetId;
         existing.LogoFileName = updated.LogoFileName;
-        if (!string.IsNullOrWhiteSpace(updated.ChannelLogoPath))
+        if (!existing.LogoSetId.HasValue || string.IsNullOrWhiteSpace(existing.LogoFileName))
+        {
+            existing.ChannelLogoPath = null;
+        }
+        else if (!string.IsNullOrWhiteSpace(updated.ChannelLogoPath))
         {
             existing.ChannelLogoPath = updated.ChannelLogoPath;
         }
 
         await BindChannelLogoAsync(existing, cancellationToken);
         existing.BugPlacement = updated.BugPlacement;
-        existing.CommercialPresetId = updated.CommercialPresetId;
-        existing.AudioLanguage = updated.AudioLanguage;
-        existing.PlayoutSeed = updated.PlayoutSeed;
-        existing.WeatherLocationQuery = updated.WeatherLocationQuery;
-        existing.FilterJson = updated.FilterJson;
+        existing.WeatherLocationQuery = null;
 
         await _db.SaveChangesAsync(cancellationToken);
         return existing;
@@ -107,13 +118,6 @@ public class ChannelService
         _db.Channels.Remove(existing);
         await _db.SaveChangesAsync(cancellationToken);
         return true;
-    }
-
-    public static List<LineupSlot> CreateEmptySlots()
-    {
-        return Enumerable.Range(0, 48)
-            .Select(i => new LineupSlot { SlotIndex = i, Candidates = new List<SlotCandidate>() })
-            .ToList();
     }
 
     public async Task SaveAnchorAsync(Guid channelId, object anchor, CancellationToken cancellationToken = default)

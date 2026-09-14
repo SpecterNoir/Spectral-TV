@@ -7,106 +7,52 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Jellyfin.Plugin.SpectralTV.Api;
 
-/// <summary>
-/// REST endpoints for channel logo sets and logo file serving.
-/// </summary>
+/// <summary>Upload and serve user-owned channel logos.</summary>
 [ApiController]
 [Route("SpectralTV/api/logos")]
 [Authorize(Policy = Policies.RequiresElevation)]
 public class LogosController : ControllerBase
 {
-    private readonly LogoSetService _logoSets;
+    private readonly LogoSetService _logos;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="LogosController"/> class.
-    /// </summary>
-    /// <param name="logoSets">Logo set service.</param>
-    public LogosController(LogoSetService logoSets)
+    public LogosController(LogoSetService logos)
     {
-        _logoSets = logoSets;
+        _logos = logos;
     }
 
-    /// <summary>
-    /// Gets all imported logo sets.
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Logo sets.</returns>
     [HttpGet("sets")]
     public async Task<ActionResult<object>> GetSets(CancellationToken cancellationToken)
     {
-        var sets = await _logoSets.GetAllAsync(cancellationToken);
-        return Ok(sets.Select(MapLogoSet));
+        var sets = await _logos.GetAllAsync(cancellationToken);
+        return Ok(sets.Where(LogoSetService.IsCustomSet).Select(MapSet));
     }
 
-    /// <summary>
-    /// Gets one logo set.
-    /// </summary>
-    /// <param name="setId">Logo set identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Logo set.</returns>
-    [HttpGet("sets/{setId:guid}")]
-    public async Task<ActionResult<object>> GetSet(Guid setId, CancellationToken cancellationToken)
-    {
-        var set = await _logoSets.GetByIdAsync(setId, cancellationToken);
-        if (set is null)
-        {
-            return NotFound();
-        }
-
-        return Ok(MapLogoSet(set));
-    }
-
-    /// <summary>
-    /// Creates a custom logo set.
-    /// </summary>
-    /// <param name="request">Create request.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The created logo set.</returns>
     [HttpPost("sets/custom")]
     public async Task<ActionResult<object>> CreateCustomSet([FromBody] CreateCustomLogoSetRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var set = await _logoSets.CreateCustomSetAsync(request.Name, cancellationToken);
-            return Ok(MapLogoSet(set));
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var set = await _logos.CreateCustomSetAsync(request.Name, cancellationToken);
+        return Ok(MapSet(set));
     }
 
-    /// <summary>
-    /// Uploads a logo into a custom logo set.
-    /// </summary>
-    /// <param name="setId">Logo set identifier.</param>
-    /// <param name="file">Image file.</param>
-    /// <param name="displayName">Display name shown in the admin UI and channel picker.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The uploaded logo entry.</returns>
     [HttpPost("sets/{setId:guid}/logos")]
     [RequestSizeLimit(20_000_000)]
-    public async Task<ActionResult<object>> UploadCustomLogo(
+    public async Task<ActionResult<object>> Upload(
         Guid setId,
         IFormFile file,
         [FromForm] string? displayName,
         CancellationToken cancellationToken)
     {
-        if (file.Length == 0)
-        {
-            return BadRequest(new { message = "Logo file is required." });
-        }
-
+        if (file.Length == 0) return BadRequest(new { message = "Choose a logo image first." });
         try
         {
             await using var stream = file.OpenReadStream();
-            var entry = await _logoSets.UploadCustomLogoAsync(
+            var entry = await _logos.UploadCustomLogoAsync(
                 setId,
                 stream,
                 file.FileName,
                 displayName ?? Path.GetFileNameWithoutExtension(file.FileName),
                 cancellationToken);
-            return Ok(MapLogoEntry(entry));
+            return Ok(MapEntry(entry));
         }
         catch (InvalidOperationException ex)
         {
@@ -114,45 +60,12 @@ public class LogosController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Updates a custom logo display name.
-    /// </summary>
-    /// <param name="setId">Logo set identifier.</param>
-    /// <param name="entryId">Logo entry identifier.</param>
-    /// <param name="request">Update request.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The updated logo entry.</returns>
-    [HttpPut("sets/{setId:guid}/entries/{entryId:guid}")]
-    public async Task<ActionResult<object>> UpdateCustomLogoEntry(
-        Guid setId,
-        Guid entryId,
-        [FromBody] UpdateLogoEntryRequest request,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var entry = await _logoSets.UpdateCustomLogoAsync(setId, entryId, request.DisplayName, cancellationToken);
-            return Ok(MapLogoEntry(entry));
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Deletes a logo from a custom logo set.
-    /// </summary>
-    /// <param name="setId">Logo set identifier.</param>
-    /// <param name="entryId">Logo entry identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>No content.</returns>
     [HttpDelete("sets/{setId:guid}/entries/{entryId:guid}")]
-    public async Task<IActionResult> DeleteCustomLogoEntry(Guid setId, Guid entryId, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteEntry(Guid setId, Guid entryId, CancellationToken cancellationToken)
     {
         try
         {
-            await _logoSets.DeleteCustomLogoAsync(setId, entryId, cancellationToken);
+            await _logos.DeleteCustomLogoAsync(setId, entryId, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -161,160 +74,48 @@ public class LogosController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Deletes a custom logo set.
-    /// </summary>
-    /// <param name="setId">Logo set identifier.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>No content.</returns>
-    [HttpDelete("sets/{setId:guid}")]
-    public async Task<IActionResult> DeleteCustomSet(Guid setId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _logoSets.DeleteCustomSetAsync(setId, cancellationToken);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Imports or refreshes the Binarygeek119 logo set from GitHub.
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The synced logo set.</returns>
-    [HttpPost("sets/binarygeek119/sync")]
-    public async Task<ActionResult<object>> SyncBinarygeek119(CancellationToken cancellationToken)
-    {
-        var set = await _logoSets.SyncBinarygeek119FromGitHubAsync(cancellationToken);
-        return Ok(MapLogoSet(set));
-    }
-
-    /// <summary>
-    /// Matches channels to preset logos and fills missing logo assignments.
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Repair summary.</returns>
-    [HttpPost("repair-channels")]
-    public async Task<ActionResult<RepairChannelLogosResult>> RepairChannelLogos(CancellationToken cancellationToken)
-    {
-        try
-        {
-            var result = await _logoSets.RepairChannelLogosAsync(cancellationToken: cancellationToken);
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Problem(detail: ex.Message, statusCode: StatusCodes.Status500InternalServerError);
-        }
-    }
-
-    /// <summary>
-    /// Serves a channel logo image for M3U and XMLTV clients.
-    /// </summary>
-    /// <param name="channelId">Channel identifier.</param>
-    /// <param name="fileName">Logo file name.</param>
-    /// <param name="channels">Channel service.</param>
-    /// <param name="holidays">Holiday channel service.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Logo image file.</returns>
     [HttpGet("{channelId:guid}/{fileName}")]
     [AllowAnonymous]
     public async Task<IActionResult> GetChannelLogo(
         Guid channelId,
         string fileName,
         [FromServices] ChannelService channels,
-        [FromServices] HolidayChannelService holidays,
         CancellationToken cancellationToken)
     {
         var channel = await channels.GetByIdAsync(channelId, cancellationToken);
-        if (channel?.LogoSetId is null)
-        {
-            return NotFound();
-        }
-
-        var sets = await _logoSets.GetAllAsync(cancellationToken);
-        var set = sets.FirstOrDefault(s => s.Id == channel.LogoSetId);
-        if (set is null)
-        {
-            return NotFound();
-        }
-
-        if (holidays.IsHolidayChannel(channel))
-        {
-            var scheduleDate = holidays.GetScheduleDateUtc(DateTime.UtcNow);
-            var effectivePath = holidays.ResolveEffectiveLogoPath(channel, scheduleDate);
-            if (!string.IsNullOrWhiteSpace(effectivePath) && System.IO.File.Exists(effectivePath))
-            {
-                return PhysicalFile(effectivePath, GetContentType(effectivePath));
-            }
-        }
-
-        var entry = set.Entries.FirstOrDefault(e => e.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
-        if (entry is null)
-        {
-            return NotFound();
-        }
-
-        var path = _logoSets.ResolveLogoPath(set, entry.RelativePath);
-        if (path is null)
-        {
-            return NotFound();
-        }
-
-        return PhysicalFile(path, GetContentType(path));
+        if (channel?.LogoSetId is null || !fileName.Equals(channel.LogoFileName, StringComparison.OrdinalIgnoreCase)) return NotFound();
+        var set = await _logos.GetByIdAsync(channel.LogoSetId.Value, cancellationToken);
+        var entry = set?.Entries.FirstOrDefault(item => item.FileName.Equals(fileName, StringComparison.OrdinalIgnoreCase));
+        if (set is null || entry is null) return NotFound();
+        var path = _logos.ResolveLogoPath(set, entry.RelativePath);
+        return path is null ? NotFound() : PhysicalFile(path, ContentTypeFor(path));
     }
 
-    private static object MapLogoSet(LogoSet set)
+    private static object MapSet(LogoSet set) => new
     {
-        return new
-        {
-            id = set.Id,
-            name = set.Name,
-            sourceUrl = set.SourceUrl,
-            isCustom = LogoSetService.IsCustomSet(set),
-            storagePath = set.StoragePath,
-            lastSyncedAt = set.LastSyncedAt,
-            entries = set.Entries
-                .OrderBy(entry => entry.DisplayName ?? entry.FileName, StringComparer.OrdinalIgnoreCase)
-                .Select(MapLogoEntry)
-                .ToList()
-        };
-    }
+        id = set.Id,
+        name = set.Name,
+        isCustom = true,
+        entries = set.Entries.OrderBy(item => item.DisplayName).Select(MapEntry).ToList()
+    };
 
-    private static object MapLogoEntry(LogoSetEntry entry)
+    private static object MapEntry(LogoSetEntry entry) => new
     {
-        return new
-        {
-            id = entry.Id,
-            logoSetId = entry.LogoSetId,
-            fileName = entry.FileName,
-            relativePath = entry.RelativePath,
-            displayName = entry.DisplayName
-        };
-    }
+        id = entry.Id,
+        logoSetId = entry.LogoSetId,
+        fileName = entry.FileName,
+        displayName = entry.DisplayName
+    };
 
-    private static string GetContentType(string path)
+    private static string ContentTypeFor(string path) => Path.GetExtension(path).ToLowerInvariant() switch
     {
-        var extension = Path.GetExtension(path);
-        return extension.ToLowerInvariant() switch
-        {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".webp" => "image/webp",
-            _ => "image/png"
-        };
-    }
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".webp" => "image/webp",
+        _ => "image/png"
+    };
 }
 
 public class CreateCustomLogoSetRequest
 {
     public string Name { get; set; } = string.Empty;
-}
-
-public class UpdateLogoEntryRequest
-{
-    public string DisplayName { get; set; } = string.Empty;
 }

@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Reflection;
 using Jellyfin.Plugin.SpectralTV.Configuration;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
@@ -54,33 +53,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasEmbedde
     /// </summary>
     public string DatabasePath => Path.Combine(DataFolder, "spectraltv.db");
 
-    /// <summary>
-    /// Gets the cached logo storage folder.
-    /// </summary>
+    /// <summary>Gets the channel logo storage folder.</summary>
     public string LogosFolder => Path.Combine(DataFolder, "logos");
-
-    /// <summary>
-    /// Gets the Emergency Broadcast System asset folder.
-    /// </summary>
-    public string EbsFolder => Path.Combine(DataFolder, "ebs");
-
-    /// <summary>
-    /// Gets the folder for user-uploaded EBS slate images.
-    /// </summary>
-    public string EbsCustomSlatesFolder => Path.Combine(EbsFolder, "custom");
-
-    /// <summary>
-    /// Gets logos shipped inside the plugin install folder.
-    /// </summary>
-    public string BundledLogosFolder => Path.Combine(
-        Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ApplicationPaths.PluginsPath,
-        "logos",
-        "binarygeek119");
-
-    /// <summary>
-    /// Gets the WeatherStar asset folder.
-    /// </summary>
-    public string WeatherStarFolder => Path.Combine(DataFolder, "weatherstar");
 
     /// <inheritdoc />
     public IEnumerable<PluginPageInfo> GetPages()
@@ -99,25 +73,8 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasEmbedde
             },
             new PluginPageInfo
             {
-                Name = "SpectralTV_Programming",
-                DisplayName = "Spectral TV Programming",
-                EnableInMainMenu = false,
-                EmbeddedResourcePath = resourcePrefix + "programmingPage.html"
-            },
-            new PluginPageInfo
-            {
-                Name = "SpectralTV_admin.css",
-                EmbeddedResourcePath = resourcePrefix + "admin.css"
-            },
-            new PluginPageInfo
-            {
                 Name = "SpectralTV_admin.js",
                 EmbeddedResourcePath = resourcePrefix + "admin.js"
-            },
-            new PluginPageInfo
-            {
-                Name = "SpectralTV_programming.js",
-                EmbeddedResourcePath = resourcePrefix + "programming.js"
             }
         ];
     }

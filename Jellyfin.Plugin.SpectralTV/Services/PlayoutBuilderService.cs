@@ -45,66 +45,18 @@ public class PlayoutBuilderService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SpectralTvDbContext>();
         var generator = scope.ServiceProvider.GetRequiredService<LineupGeneratorService>();
-        var commercialService = scope.ServiceProvider.GetRequiredService<CommercialService>();
-        var channelService = scope.ServiceProvider.GetRequiredService<ChannelService>();
-        var holidays = scope.ServiceProvider.GetRequiredService<HolidayChannelService>();
 
         await db.Database.EnsureCreatedAsync(cancellationToken);
-        await commercialService.SyncCommercialLibraryAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
         var horizonEnd = PlayoutScheduleHelper.GetHorizonEndUtc(now);
         var trimBefore = now.AddDays(-2);
 
-        var channels = await db.Channels.Where(c => c.Enabled).ToListAsync(cancellationToken);
+        var channels = await db.Channels
+            .Where(c => c.Enabled && (c.ContentType == Domain.ChannelContentType.TvShow || c.ContentType == Domain.ChannelContentType.Movie))
+            .ToListAsync(cancellationToken);
         foreach (var channel in channels)
         {
-            if (holidays.IsHolidayChannel(channel))
-            {
-                var scheduleDate = holidays.GetScheduleDateUtc(now);
-                var activeHoliday = holidays.GetActiveHoliday(scheduleDate);
-                var anchor = await channelService.GetAnchorAsync<PlayoutAnchorState>(channel.Id, cancellationToken)
-                    ?? new PlayoutAnchorState();
-                var activeId = activeHoliday?.Id;
-                if (!string.Equals(anchor.LastHolidayId, activeId, StringComparison.Ordinal))
-                {
-                    anchor.LastHolidayId = activeId;
-                    await channelService.SaveAnchorAsync(channel.Id, anchor, cancellationToken);
-
-                    if (activeHoliday is not null && Plugin.Instance?.Configuration.Ai.Enabled == true)
-                    {
-                        try
-                        {
-                            var ai = scope.ServiceProvider.GetRequiredService<AiLineupGeneratorService>();
-                            var preview = await ai.GenerateAsync(channel.Id, null, cancellationToken);
-                            await ai.ApplyAsync(
-                                channel.Id,
-                                preview.LineupSlots,
-                                rebuildPlayout: false,
-                                generator,
-                                cancellationToken);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Holiday AI lineup refresh failed for {Channel}", channel.Name);
-                        }
-                    }
-
-                    await generator.BuildPlayoutAsync(
-                        channel,
-                        now,
-                        horizonEnd,
-                        PlayoutBuildMode.ReplaceWindow,
-                        cancellationToken);
-
-                    _logger.LogInformation(
-                        "Holiday season changed for {Channel} to {Holiday}; rebuilt playout",
-                        channel.Name,
-                        activeHoliday?.Name ?? "off-season");
-                    continue;
-                }
-            }
-
             var stale = await db.PlayoutItems
                 .Where(p => p.ChannelId == channel.Id && p.Finish < trimBefore)
                 .ToListAsync(cancellationToken);
@@ -179,16 +131,16 @@ public class PlayoutBuilderService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SpectralTvDbContext>();
         var generator = scope.ServiceProvider.GetRequiredService<LineupGeneratorService>();
-        var commercialService = scope.ServiceProvider.GetRequiredService<CommercialService>();
 
         await db.Database.EnsureCreatedAsync(cancellationToken);
-        await commercialService.SyncCommercialLibraryAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
         var rebuildStart = now.Date;
         var horizonEnd = PlayoutScheduleHelper.GetHorizonEndUtc(now);
 
-        var channels = await db.Channels.Where(c => c.Enabled).ToListAsync(cancellationToken);
+        var channels = await db.Channels
+            .Where(c => c.Enabled && (c.ContentType == Domain.ChannelContentType.TvShow || c.ContentType == Domain.ChannelContentType.Movie))
+            .ToListAsync(cancellationToken);
         foreach (var channel in channels)
         {
             await generator.BuildPlayoutAsync(

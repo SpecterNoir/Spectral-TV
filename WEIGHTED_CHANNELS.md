@@ -10,7 +10,6 @@ A channel can contain any mix of:
 - individual seasons
 - individual episodes
 - movies
-- music videos
 
 Each source receives a target airtime value. The values are normalized automatically, so `50 / 30 / 20` and `5 / 3 / 2` represent the same mix.
 
@@ -41,8 +40,8 @@ Weighted mode still uses the recovered SpectralTV Live TV infrastructure:
 - mid-program tune-in based on current wall-clock time
 - Jellyfin Live TV playback on clients such as Web, desktop, Android/Fire TV, and Roku
 
-The new **SpectralTV Programming** dashboard page provides channel creation, programming/filler search, percentages, playback order, and playout rebuild controls.
+The single **Spectral TV** dashboard workspace provides channel creation, programming and break search, airtime shares, playback order, logo upload, rebuild controls, and Jellyfin Live TV setup.
 
 ## Compatibility
 
-Weighted mode is opt-in per channel. Existing legacy SpectralTV lineups continue to use the original 48-slot scheduler until weighted programming is enabled for that channel.
+Weighted programming is the only supported scheduling model. Legacy database tables are retained only so an existing installation can upgrade without startup failure; their old editors and runtime services are not exposed.

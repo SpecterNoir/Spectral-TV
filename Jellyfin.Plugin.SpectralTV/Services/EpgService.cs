@@ -15,20 +15,14 @@ public class EpgService
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
 
     private readonly SpectralTvDbContext _db;
-    private readonly HolidayChannelService _holidays;
     private readonly GuideMetadataService _guideMetadata;
-    private readonly WeatherGuideMetadataService _weatherGuideMetadata;
 
     public EpgService(
         SpectralTvDbContext db,
-        HolidayChannelService holidays,
-        GuideMetadataService guideMetadata,
-        WeatherGuideMetadataService weatherGuideMetadata)
+        GuideMetadataService guideMetadata)
     {
         _db = db;
-        _holidays = holidays;
         _guideMetadata = guideMetadata;
-        _weatherGuideMetadata = weatherGuideMetadata;
     }
 
     public async Task<byte[]> GenerateXmlTvBytesAsync(string baseUrl, CancellationToken cancellationToken = default)
@@ -44,14 +38,18 @@ public class EpgService
 
     private async Task<XDocument> BuildXmlTvDocumentAsync(string baseUrl, CancellationToken cancellationToken)
     {
-        var channels = await _db.Channels.Where(c => c.Enabled).OrderBy(c => c.Number).AsNoTracking().ToListAsync(cancellationToken);
+        var channels = await _db.Channels
+            .Where(c => c.Enabled && (c.ContentType == ChannelContentType.TvShow || c.ContentType == ChannelContentType.Movie))
+            .OrderBy(c => c.Number)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
         var start = DateTime.UtcNow.AddHours(-3);
         var end = DateTime.UtcNow.AddDays(PlayoutScheduleHelper.GetPlayoutDaysToBuild());
 
         var root = new XElement(
             "tv",
             new XAttribute("generator-info-name", "SpectralTV"),
-            new XAttribute("generator-info-url", "https://github.com/SpecterNoir/Jellyfin-TV"));
+            new XAttribute("generator-info-url", "https://github.com/SpecterNoir/Spectral-TV"));
 
         foreach (var channel in channels)
         {
@@ -76,24 +74,10 @@ public class EpgService
         var items = BuildGuideItems(rawItems);
 
         var metadataByItemId = _guideMetadata.ResolveBatch(items.Select(i => i.JellyfinItemId));
-        var channelsById = channels.ToDictionary(c => c.Id);
-        var weatherItems = items
-            .Where(i => i.IsVirtual && i.VirtualSource == VirtualContentSource.WeatherStar)
-            .ToList();
-        var weatherMetadataByPlayoutId = await _weatherGuideMetadata.ResolveAsync(
-            weatherItems,
-            channelsById,
-            channel => GetLogoUrl(channel, baseUrl),
-            cancellationToken);
-
         foreach (var item in items)
         {
             GuideProgramMetadata? metadata = null;
-            if (weatherMetadataByPlayoutId.TryGetValue(item.Id, out var weatherMetadata))
-            {
-                metadata = weatherMetadata;
-            }
-            else if (item.JellyfinItemId.HasValue)
+            if (item.JellyfinItemId.HasValue)
             {
                 metadataByItemId.TryGetValue(item.JellyfinItemId.Value, out metadata);
             }
@@ -240,7 +224,11 @@ public class EpgService
 
     public async Task<string> GenerateM3uAsync(string baseUrl, CancellationToken cancellationToken = default)
     {
-        var channels = await _db.Channels.Where(c => c.Enabled).OrderBy(c => c.Number).AsNoTracking().ToListAsync(cancellationToken);
+        var channels = await _db.Channels
+            .Where(c => c.Enabled && (c.ContentType == ChannelContentType.TvShow || c.ContentType == ChannelContentType.Movie))
+            .OrderBy(c => c.Number)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
         var sb = new StringBuilder();
         sb.AppendLine("#EXTM3U");
 
@@ -303,12 +291,6 @@ public class EpgService
     {
         baseUrl ??= Plugin.Instance?.Configuration.PublicBaseUrl ?? "http://localhost:8096";
         var fileName = channel.LogoFileName;
-        if (_holidays.IsHolidayChannel(channel))
-        {
-            var scheduleDate = _holidays.GetScheduleDateUtc(DateTime.UtcNow);
-            fileName = _holidays.ResolveEffectiveLogoFileName(channel, scheduleDate) ?? fileName;
-        }
-
         if (!string.IsNullOrWhiteSpace(fileName))
         {
             return $"{baseUrl.TrimEnd('/')}/SpectralTV/api/logos/{channel.Id:N}/{Uri.EscapeDataString(fileName)}";

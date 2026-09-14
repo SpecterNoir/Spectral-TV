@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -30,18 +29,6 @@ public class DatabaseInitializer : IHostedService
             var db = scope.ServiceProvider.GetRequiredService<SpectralTvDbContext>();
             await SchemaMigrator.MigrateAsync(db, _logger, cancellationToken);
             await WeightedProgrammingSchemaMigrator.MigrateAsync(db, _logger, cancellationToken);
-
-            if (!await db.CommercialPresets.AnyAsync(cancellationToken))
-            {
-                db.CommercialPresets.Add(new Domain.CommercialPreset
-                {
-                    Name = "Default",
-                    BreakMode = Domain.CommercialBreakMode.ChaptersThenTimer,
-                    TimerIntervalMinutes = 12,
-                    PostRollCount = 2
-                });
-                await db.SaveChangesAsync(cancellationToken);
-            }
 
             _logger.LogInformation("SpectralTV database initialized");
         }

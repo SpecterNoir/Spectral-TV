@@ -1,628 +1,263 @@
 <div id="SpectralTVConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select" data-controller="__plugin/SpectralTV_admin.js">
-    <link rel="stylesheet" href="/web/configurationpage?name=SpectralTV_admin.css">
-        <div id="spectraltv-app">
-            <header class="spectraltv-header">
-                <div class="spectraltv-header-text">
-                    <h1>Spectral TV</h1>
-                    <p>Simulated live TV channels for Jellyfin</p>
-                </div>
-                <div id="dashboard-stats" class="dashboard-stats"></div>
-            </header>
+    <style>
+        #SpectralTVConfigPage {
+            --st-red: #ef4444; --st-red-dark: #b91c1c; --st-red-soft: rgba(239,68,68,.13);
+            --st-blue: #38bdf8; --st-green: #4ade80; --st-amber: #fbbf24;
+            --st-panel: rgba(255,255,255,.045); --st-panel-strong: rgba(255,255,255,.075);
+            --st-border: rgba(255,255,255,.12); --st-muted: rgba(255,255,255,.68);
+            --st-shadow: 0 18px 45px rgba(0,0,0,.22);
+        }
+        #SpectralTVConfigPage * { box-sizing:border-box; }
+        #SpectralTVConfigPage .st-shell { max-width:1360px; margin:0 auto; padding:2rem 1.25rem 5rem; }
+        #SpectralTVConfigPage .st-hero { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
+        #SpectralTVConfigPage .st-brand { display:flex; align-items:center; gap:.9rem; }
+        #SpectralTVConfigPage .st-mark { width:3.1rem; height:3.1rem; border-radius:14px; display:grid; place-items:center; color:#fff; background:linear-gradient(145deg,var(--st-red),#7f1d1d); box-shadow:0 10px 28px rgba(239,68,68,.28); font-size:1.55rem; }
+        #SpectralTVConfigPage h1,#SpectralTVConfigPage h2,#SpectralTVConfigPage h3,#SpectralTVConfigPage p { margin-top:0; }
+        #SpectralTVConfigPage h1 { margin-bottom:.2rem; font-size:2rem; letter-spacing:-.035em; }
+        #SpectralTVConfigPage h2 { margin-bottom:.35rem; font-size:1.35rem; }
+        #SpectralTVConfigPage h3 { margin-bottom:.35rem; font-size:1.05rem; }
+        #SpectralTVConfigPage .st-subtitle,#SpectralTVConfigPage .st-muted { color:var(--st-muted); }
+        #SpectralTVConfigPage .st-subtitle { margin:0; }
+        #SpectralTVConfigPage .st-status-pill { display:flex; align-items:center; gap:.45rem; padding:.55rem .8rem; border:1px solid var(--st-border); border-radius:999px; background:var(--st-panel); font-size:.88rem; white-space:nowrap; }
+        #SpectralTVConfigPage .st-status-dot { width:.55rem; height:.55rem; border-radius:50%; background:var(--st-green); box-shadow:0 0 12px rgba(74,222,128,.65); }
+        #SpectralTVConfigPage .st-workflow { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.55rem; padding:.55rem; margin:1rem 0; border:1px solid var(--st-border); border-radius:16px; background:rgba(0,0,0,.16); position:sticky; top:.5rem; z-index:20; backdrop-filter:blur(12px); }
+        #SpectralTVConfigPage .st-step { border:0; border-radius:11px; padding:.75rem; display:flex; align-items:center; gap:.65rem; color:inherit; background:transparent; cursor:pointer; text-align:left; }
+        #SpectralTVConfigPage .st-step:hover { background:var(--st-panel); }
+        #SpectralTVConfigPage .st-step.is-active { background:linear-gradient(135deg,var(--st-red-soft),rgba(239,68,68,.04)); box-shadow:inset 0 0 0 1px rgba(239,68,68,.45); }
+        #SpectralTVConfigPage .st-step-number { width:1.75rem; height:1.75rem; flex:0 0 auto; display:grid; place-items:center; border-radius:50%; background:var(--st-panel-strong); font-weight:800; }
+        #SpectralTVConfigPage .st-step.is-active .st-step-number { background:var(--st-red); color:#fff; }
+        #SpectralTVConfigPage .st-step strong { display:block; font-size:.88rem; }
+        #SpectralTVConfigPage .st-step small { display:block; margin-top:.08rem; color:var(--st-muted); font-size:.72rem; }
+        #SpectralTVConfigPage .st-layout { display:grid; grid-template-columns:285px minmax(0,1fr); gap:1rem; align-items:start; }
+        #SpectralTVConfigPage .st-sidebar { position:sticky; top:6.5rem; }
+        #SpectralTVConfigPage .st-card { border:1px solid var(--st-border); border-radius:16px; padding:1.15rem; background:var(--st-panel); box-shadow:var(--st-shadow); }
+        #SpectralTVConfigPage .st-card + .st-card { margin-top:1rem; }
+        #SpectralTVConfigPage .st-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
+        #SpectralTVConfigPage .st-card-head p { margin:0; color:var(--st-muted); line-height:1.45; }
+        #SpectralTVConfigPage .st-channel-head { display:flex; align-items:center; justify-content:space-between; gap:.65rem; margin-bottom:.75rem; }
+        #SpectralTVConfigPage .st-channel-list { display:grid; gap:.45rem; max-height:57vh; overflow:auto; padding-right:.15rem; }
+        #SpectralTVConfigPage .st-channel-item { width:100%; display:flex; align-items:center; gap:.7rem; padding:.7rem; border:1px solid transparent; border-radius:11px; color:inherit; background:transparent; cursor:pointer; text-align:left; }
+        #SpectralTVConfigPage .st-channel-item:hover { background:var(--st-panel); }
+        #SpectralTVConfigPage .st-channel-item.is-active { border-color:rgba(239,68,68,.5); background:var(--st-red-soft); }
+        #SpectralTVConfigPage .st-channel-number { min-width:2.7rem; padding:.25rem .42rem; border-radius:7px; background:rgba(0,0,0,.24); color:var(--st-muted); font:700 .78rem/1.2 monospace; text-align:center; }
+        #SpectralTVConfigPage .st-channel-name { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:650; }
+        #SpectralTVConfigPage .st-channel-state { width:.48rem; height:.48rem; border-radius:50%; background:#64748b; }
+        #SpectralTVConfigPage .st-channel-state.is-on { background:var(--st-green); }
+        #SpectralTVConfigPage .st-empty { padding:1.4rem .8rem; border:1px dashed var(--st-border); border-radius:12px; text-align:center; color:var(--st-muted); }
+        #SpectralTVConfigPage .st-panel { display:none; }
+        #SpectralTVConfigPage .st-panel.is-active { display:block; }
+        #SpectralTVConfigPage .st-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }
+        #SpectralTVConfigPage .st-field { display:grid; gap:.38rem; min-width:0; }
+        #SpectralTVConfigPage .st-field > span { font-size:.82rem; font-weight:700; color:var(--st-muted); }
+        #SpectralTVConfigPage .st-field-full { grid-column:1/-1; }
+        #SpectralTVConfigPage .st-check { display:flex; align-items:flex-start; gap:.65rem; padding:.75rem; border:1px solid var(--st-border); border-radius:11px; background:rgba(0,0,0,.12); cursor:pointer; }
+        #SpectralTVConfigPage .st-check input { margin-top:.15rem; }
+        #SpectralTVConfigPage .st-check strong,#SpectralTVConfigPage .st-check small { display:block; }
+        #SpectralTVConfigPage .st-check small { margin-top:.15rem; color:var(--st-muted); line-height:1.35; }
+        #SpectralTVConfigPage .st-actions { display:flex; flex-wrap:wrap; align-items:center; gap:.55rem; margin-top:1rem; }
+        #SpectralTVConfigPage .st-button { border:1px solid var(--st-border); border-radius:10px; padding:.62rem .86rem; color:inherit; background:var(--st-panel-strong); cursor:pointer; font-weight:700; }
+        #SpectralTVConfigPage .st-button:hover { filter:brightness(1.16); }
+        #SpectralTVConfigPage .st-button:disabled { opacity:.45; cursor:not-allowed; }
+        #SpectralTVConfigPage .st-button-primary { border-color:transparent; color:#fff; background:linear-gradient(135deg,var(--st-red),var(--st-red-dark)); }
+        #SpectralTVConfigPage .st-button-danger { color:#fecaca; border-color:rgba(239,68,68,.35); background:rgba(127,29,29,.22); }
+        #SpectralTVConfigPage .st-button-small { padding:.43rem .62rem; font-size:.78rem; }
+        #SpectralTVConfigPage .st-search-wrap { position:relative; }
+        #SpectralTVConfigPage .st-search-results { display:none; position:absolute; z-index:15; top:calc(100% + .35rem); left:0; right:0; max-height:340px; overflow:auto; padding:.4rem; border:1px solid var(--st-border); border-radius:12px; background:#17191d; box-shadow:0 20px 45px rgba(0,0,0,.45); }
+        #SpectralTVConfigPage .st-search-results.has-results { display:grid; gap:.25rem; }
+        #SpectralTVConfigPage .st-result { display:flex; align-items:center; justify-content:space-between; gap:.8rem; width:100%; padding:.7rem; border:0; border-radius:9px; color:inherit; background:transparent; cursor:pointer; text-align:left; }
+        #SpectralTVConfigPage .st-result:hover { background:var(--st-panel-strong); }
+        #SpectralTVConfigPage .st-result-meta { color:var(--st-muted); font-size:.76rem; margin-top:.15rem; }
+        #SpectralTVConfigPage .st-list { display:grid; gap:.6rem; margin-top:1rem; }
+        #SpectralTVConfigPage .st-source { display:grid; grid-template-columns:minmax(180px,1fr) 130px 145px auto; gap:.7rem; align-items:center; padding:.8rem; border:1px solid var(--st-border); border-radius:12px; background:rgba(0,0,0,.12); }
+        #SpectralTVConfigPage .st-source-title { min-width:0; }
+        #SpectralTVConfigPage .st-source-title strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        #SpectralTVConfigPage .st-source-title small { color:var(--st-muted); }
+        #SpectralTVConfigPage .st-source-share { display:grid; grid-template-columns:1fr auto; gap:.35rem; align-items:center; }
+        #SpectralTVConfigPage .st-source-share small { color:var(--st-muted); }
+        #SpectralTVConfigPage .st-meter { height:.34rem; grid-column:1/-1; overflow:hidden; border-radius:999px; background:rgba(255,255,255,.09); }
+        #SpectralTVConfigPage .st-meter > span { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--st-red),#fb7185); }
+        #SpectralTVConfigPage .st-summary { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.8rem 1rem; margin-bottom:.8rem; border-radius:11px; background:rgba(0,0,0,.17); }
+        #SpectralTVConfigPage .st-summary strong { font-size:1.15rem; }
+        #SpectralTVConfigPage .st-notice { padding:.8rem 1rem; border-left:3px solid var(--st-blue); border-radius:0 10px 10px 0; color:var(--st-muted); background:rgba(56,189,248,.08); line-height:1.45; }
+        #SpectralTVConfigPage .st-break-preset { display:grid; grid-template-columns:repeat(4,1fr); gap:.45rem; }
+        #SpectralTVConfigPage .st-choice { position:relative; }
+        #SpectralTVConfigPage .st-choice input { position:absolute; opacity:0; pointer-events:none; }
+        #SpectralTVConfigPage .st-choice span { display:block; padding:.68rem; border:1px solid var(--st-border); border-radius:10px; text-align:center; cursor:pointer; }
+        #SpectralTVConfigPage .st-choice input:checked + span { border-color:var(--st-red); background:var(--st-red-soft); color:#fff; }
+        #SpectralTVConfigPage details { margin-top:1rem; }
+        #SpectralTVConfigPage summary { cursor:pointer; color:var(--st-muted); font-weight:700; }
+        #SpectralTVConfigPage details[open] summary { margin-bottom:1rem; }
+        #SpectralTVConfigPage .st-readiness { display:grid; gap:.5rem; margin:.8rem 0; }
+        #SpectralTVConfigPage .st-checkline { display:flex; align-items:center; gap:.65rem; padding:.65rem .75rem; border-radius:10px; background:rgba(0,0,0,.13); }
+        #SpectralTVConfigPage .st-checkline i { width:1.35rem; height:1.35rem; display:grid; place-items:center; border-radius:50%; background:#475569; font-style:normal; font-size:.75rem; }
+        #SpectralTVConfigPage .st-checkline.is-ready i { background:#166534; color:#dcfce7; }
+        #SpectralTVConfigPage .st-url { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.6rem; align-items:center; padding:.65rem; border:1px solid var(--st-border); border-radius:11px; background:rgba(0,0,0,.15); }
+        #SpectralTVConfigPage .st-url code { overflow:auto; white-space:nowrap; color:#bae6fd; }
+        #SpectralTVConfigPage .st-steps-list { padding-left:1.35rem; color:var(--st-muted); line-height:1.7; }
+        #SpectralTVConfigPage .st-toast { position:fixed; right:1.25rem; bottom:1.25rem; z-index:100; max-width:min(420px,calc(100vw - 2rem)); padding:.85rem 1rem; border:1px solid var(--st-border); border-radius:12px; background:#181a1f; box-shadow:0 18px 50px rgba(0,0,0,.5); }
+        #SpectralTVConfigPage .st-toast.is-good { border-color:rgba(74,222,128,.45); }
+        #SpectralTVConfigPage .st-toast.is-error { border-color:rgba(239,68,68,.55); }
+        #SpectralTVConfigPage .st-hidden { display:none !important; }
+        #SpectralTVConfigPage .st-modal { position:fixed; inset:0; z-index:90; display:grid; place-items:center; padding:1rem; background:rgba(0,0,0,.72); }
+        #SpectralTVConfigPage .st-modal-card { width:min(560px,100%); }
+        #SpectralTVConfigPage .st-logo-preview { width:120px; height:70px; object-fit:contain; padding:.45rem; border:1px solid var(--st-border); border-radius:10px; background:rgba(0,0,0,.25); }
+        #SpectralTVConfigPage .st-file-row { display:flex; align-items:center; flex-wrap:wrap; gap:.65rem; }
+        #SpectralTVConfigPage .st-busy { opacity:.65; pointer-events:none; }
+        @media (max-width:1000px) {
+            #SpectralTVConfigPage .st-layout { grid-template-columns:1fr; }
+            #SpectralTVConfigPage .st-sidebar { position:static; }
+            #SpectralTVConfigPage .st-channel-list { display:flex; max-height:none; overflow:auto; }
+            #SpectralTVConfigPage .st-channel-item { min-width:210px; }
+            #SpectralTVConfigPage .st-source { grid-template-columns:minmax(180px,1fr) 120px; }
+        }
+        @media (max-width:720px) {
+            #SpectralTVConfigPage .st-shell { padding:.9rem .65rem 3rem; }
+            #SpectralTVConfigPage .st-hero { align-items:flex-start; }
+            #SpectralTVConfigPage .st-status-pill { display:none; }
+            #SpectralTVConfigPage .st-workflow { position:static; grid-template-columns:repeat(2,1fr); }
+            #SpectralTVConfigPage .st-step small { display:none; }
+            #SpectralTVConfigPage .st-form-grid { grid-template-columns:1fr; }
+            #SpectralTVConfigPage .st-field-full { grid-column:auto; }
+            #SpectralTVConfigPage .st-source { grid-template-columns:1fr; }
+            #SpectralTVConfigPage .st-break-preset { grid-template-columns:repeat(2,1fr); }
+        }
+    </style>
 
-            <nav class="spectraltv-tabs" role="tablist">
-                <button type="button" class="tab active" data-tab="channels" role="tab">Channels</button>
-                <button type="button" class="tab" data-tab="presets" role="tab">Presets</button>
-                <button type="button" class="tab" data-tab="lineups" role="tab">Lineups</button>
-                <button type="button" class="tab" data-tab="list" role="tab">List</button>
-                <button type="button" class="tab" data-tab="special" role="tab">Special Presentation</button>
-                <button type="button" class="tab" data-tab="commercials" role="tab">Commercials</button>
-                <button type="button" class="tab" data-tab="logos" role="tab">Logo Sets</button>
-                <button type="button" class="tab" data-tab="ebs" role="tab">EBS</button>
-                <button type="button" class="tab" data-tab="ai" role="tab">AI</button>
-                <button type="button" class="tab" data-tab="weather" role="tab">Weather</button>
-                <button type="button" class="tab" data-tab="playwright" role="tab">Playwright</button>
-                <button type="button" class="tab" data-tab="general" role="tab">General</button>
-                <button type="button" class="tab" data-tab="setup" role="tab">Live TV Setup</button>
-                <button type="button" class="tab" data-tab="tasks" role="tab">Tasks</button>
-            </nav>
+    <div class="st-shell">
+        <header class="st-hero">
+            <div class="st-brand"><div class="st-mark" aria-hidden="true">◉</div><div><h1>Spectral TV</h1><p class="st-subtitle">Build always-on channels from your Jellyfin library.</p></div></div>
+            <div class="st-status-pill"><span class="st-status-dot"></span><span id="st-header-status">Ready</span></div>
+        </header>
 
-            <div id="toast-container" class="toast-container" aria-live="polite"></div>
+        <nav class="st-workflow" aria-label="Channel setup steps">
+            <button type="button" class="st-step is-active" data-step="channel"><span class="st-step-number">1</span><span><strong>Channel</strong><small>Name, number, and look</small></span></button>
+            <button type="button" class="st-step" data-step="programming"><span class="st-step-number">2</span><span><strong>Programming</strong><small>Shows, seasons, and movies</small></span></button>
+            <button type="button" class="st-step" data-step="breaks"><span class="st-step-number">3</span><span><strong>Breaks</strong><small>Promos, bumpers, and IDs</small></span></button>
+            <button type="button" class="st-step" data-step="finish"><span class="st-step-number">4</span><span><strong>Build &amp; connect</strong><small>Guide and Jellyfin setup</small></span></button>
+        </nav>
 
-            <section id="tab-channels" class="tab-panel active">
-                <div class="split-layout">
-                    <div class="split-main">
-                        <div class="toolbar">
-                            <button type="button" id="btn-new-channel" class="raised button-submit emby-button">New Channel</button>
-                            <input id="channel-filter" type="search" class="emby-input search-input" placeholder="Filter channels…">
-                        </div>
-                        <div id="channels-list" class="data-table-wrap"></div>
-                    </div>
-                    <aside id="channel-form-panel" class="split-side card hidden">
-                        <div class="panel-header">
-                            <h2 id="channel-form-title">New Channel</h2>
-                            <button type="button" id="btn-close-channel" class="btn-ghost" title="Close">&times;</button>
-                        </div>
-                        <form id="channel-form" class="form-grid">
-                            <label class="field">
-                                <span>Number</span>
-                                <input id="ch-number" type="number" min="1" step="0.1" class="emby-input" title="Whole numbers or sub-channels .0 through .9 (e.g. 5.1)">
-                            </label>
-                            <label class="field">
-                                <span>Name</span>
-                                <input id="ch-name" type="text" class="emby-input" required>
-                            </label>
-                            <label class="field">
-                                <span>Content Type</span>
-                                <select id="ch-content-type" class="emby-select">
-                                    <option value="0">TV Show</option>
-                                    <option value="1">Movie</option>
-                                    <option value="2">Music Video</option>
-                                    <option value="3">Music</option>
-                                    <option value="4">Weather</option>
-                                </select>
-                            </label>
-                            <label class="field">
-                                <span>Aspect Ratio</span>
-                                <select id="ch-aspect" class="emby-select">
-                                    <option value="0">16:9</option>
-                                    <option value="1">4:3</option>
-                                </select>
-                            </label>
-                            <label class="field checkbox-field">
-                                <input id="ch-scanlines" type="checkbox">
-                                <span>Scanlines (4:3 CRT look)</span>
-                            </label>
-                            <label class="field">
-                                <span>Bug Placement</span>
-                                <select id="ch-bug" class="emby-select">
-                                    <option value="0">Auto</option>
-                                    <option value="1">Top Left</option>
-                                    <option value="2">Top Right</option>
-                                    <option value="3">Bottom Left</option>
-                                    <option value="4">Bottom Right</option>
-                                    <option value="5">No Bug</option>
-                                </select>
-                            </label>
-                            <label class="field">
-                                <span>Audio Language</span>
-                                <input id="ch-audio" value="eng" class="emby-input">
-                            </label>
-                            <label class="field">
-                                <span>Logo Set</span>
-                                <select id="ch-logo-set" class="emby-select"><option value="">None</option></select>
-                            </label>
-                            <label class="field">
-                                <span>Channel Logo</span>
-                                <select id="ch-logo-file" class="emby-select"><option value="">Default</option></select>
-                            </label>
-                            <div id="weather-fields" class="field-group hidden">
-                                <label class="field">
-                                    <span>Weather location (latLonQuery)</span>
-                                    <input id="ch-weather-location" type="text" class="emby-input" placeholder="50317, Des Moines, IA, USA">
-                                </label>
-                                <p class="hint">Weather channels stream live local weather 24/7. Enter a ZIP code, city, or address (ws4kp latLonQuery). Configure WeatherStar display settings on the Weather tab.</p>
+        <div class="st-layout">
+            <aside class="st-sidebar st-card">
+                <div class="st-channel-head"><div><strong>Your channels</strong><div class="st-muted" id="st-channel-count">0 channels</div></div><button type="button" id="st-new-channel" class="st-button st-button-primary st-button-small">+ New</button></div>
+                <div id="st-channel-list" class="st-channel-list"></div>
+            </aside>
+
+            <main id="st-main">
+                <section id="st-panel-channel" class="st-panel is-active" data-panel="channel">
+                    <div class="st-card">
+                        <div class="st-card-head"><div><h2>Channel details</h2><p>This is what viewers will see in Jellyfin Live TV.</p></div></div>
+                        <div id="st-channel-empty" class="st-empty">Create or select a channel to begin.</div>
+                        <form id="st-channel-form" class="st-hidden">
+                            <div class="st-form-grid">
+                                <label class="st-field"><span>Channel name</span><input id="st-channel-name" class="emby-input" type="text" required placeholder="Cartoon Network"></label>
+                                <label class="st-field"><span>Channel number</span><input id="st-channel-number" class="emby-input" type="number" min="1" step="0.1" required></label>
+                                <label class="st-field"><span>Picture format</span><select id="st-channel-aspect" class="emby-select"><option value="0">16:9 widescreen</option><option value="1">4:3 classic television</option></select></label>
+                                <label class="st-field"><span>On-screen logo position</span><select id="st-channel-bug" class="emby-select"><option value="0">Automatic</option><option value="1">Top left</option><option value="2">Top right</option><option value="3">Bottom left</option><option value="4">Bottom right</option><option value="5">Do not overlay logo</option></select></label>
+                                <label class="st-check"><input id="st-channel-enabled" type="checkbox"><span><strong>Channel enabled</strong><small>Enabled channels appear in the M3U feed and Jellyfin guide.</small></span></label>
+                                <label class="st-check"><input id="st-channel-scanlines" type="checkbox"><span><strong>CRT scanline effect</strong><small>Optional styling for a classic 4:3 channel.</small></span></label>
                             </div>
-                            <label class="field checkbox-field">
-                                <input id="ch-enabled" type="checkbox" checked>
-                                <span>Enabled</span>
-                            </label>
-                            <div id="channel-now-playing" class="now-playing hidden"></div>
-                            <div class="actions">
-                                <button type="submit" class="raised button-submit emby-button">Save</button>
-                                <button type="button" id="btn-delete-channel" class="btn-danger hidden">Delete</button>
-                                <button type="button" id="btn-cancel-channel" class="emby-button">Cancel</button>
-                            </div>
+                            <div class="st-actions"><button type="submit" class="st-button st-button-primary">Save channel</button><button type="button" id="st-delete-channel" class="st-button st-button-danger">Delete channel</button></div>
                         </form>
-                    </aside>
-                </div>
-            </section>
-
-            <section id="tab-presets" class="tab-panel">
-                <div class="card section-card">
-                    <div class="section-header">
-                        <h3>Binarygeek119 Ready-made Channels</h3>
-                        <div class="row-actions">
-                            <button type="button" id="btn-apply-presets" class="raised button-submit emby-button">Create Missing Channels</button>
-                        </div>
                     </div>
-                    <p class="hint">Creates the standard Binarygeek119 TV lineup with channel numbers, names, library tags, and bundled logos from <a href="https://github.com/binarygeek119/open-channel-logos/tree/spectraltv2" target="_blank" rel="noopener">open-channel-logos (spectraltv2)</a> for both the Live TV guide icon and on-screen channel bug.</p>
-                    <label class="field">
-                        <span>Channel numbering</span>
-                        <select id="preset-numbering-mode" class="emby-select">
-                            <option value="1">Subchannels (119.1–119.6, 124.1–124.3, 126.1–126.3, 203.1–203.4, 312.1–312.3)</option>
-                            <option value="0">Legacy whole numbers (119, 120, 203…)</option>
-                        </select>
-                    </label>
-                    <p class="hint" id="preset-numbering-help">Subchannel mode uses legacy-major numbering such as 119.1, 124.2, and 203.4. Legacy mode uses the original Binarygeek119 whole-number dial positions.</p>
-                    <label class="field checkbox-field">
-                        <input id="preset-update-existing" type="checkbox">
-                        <span>Update existing channels that use the same channel number</span>
-                    </label>
-                    <div id="presets-list" class="data-table-wrap"></div>
-                    <div id="presets-result" class="status-card hidden"></div>
-                </div>
-            </section>
 
-            <section id="tab-lineups" class="tab-panel">
-                <div class="toolbar lineup-toolbar">
-                    <label class="inline-field">
-                        <span>Channel</span>
-                        <select id="lineup-channel-select" class="emby-select"></select>
-                    </label>
-                    <label class="inline-field">
-                        <span>Preview date</span>
-                        <input id="lineup-preview-date" type="date" class="emby-input">
-                    </label>
-                    <button id="btn-preview-lineup" class="emby-button">Preview Day</button>
-                    <button id="btn-save-lineup" class="raised button-submit emby-button">Save Lineup</button>
-                    <button id="btn-rebuild-lineup" class="emby-button">Rebuild Playout</button>
-                </div>
-                <p id="lineup-hint" class="hint">Click a 30-minute slot to edit candidates. The Jellyfin Live TV <strong>guide</strong> comes from <strong>playout</strong> (built from this lineup). Saving a lineup rebuilds playout for this channel. Weather channels update the guide automatically.</p>
-                <div id="lineup-playout-banner" class="preview-banner hidden"></div>
-                <div id="lineup-weather-banner" class="preview-banner hidden"></div>
-                <div id="lineup-preview-banner" class="preview-banner hidden"></div>
-                <div id="lineup-grid" class="lineup-grid"></div>
-                <div id="lineup-overrides-section" class="card section-card">
-                    <div class="section-header">
-                        <h3>Override Lineups</h3>
-                        <button id="btn-add-override" class="emby-button">Add Override</button>
+                    <div id="st-branding-card" class="st-card st-hidden">
+                        <div class="st-card-head"><div><h2>Channel logo</h2><p>Upload one image for the guide icon and optional on-screen network bug.</p></div><img id="st-logo-preview" class="st-logo-preview st-hidden" alt="Current channel logo"></div>
+                        <div class="st-file-row"><input id="st-logo-file" type="file" accept="image/png,image/jpeg,image/webp"><button type="button" id="st-upload-logo" class="st-button">Upload &amp; use logo</button><button type="button" id="st-clear-logo" class="st-button st-hidden">Remove logo</button></div>
+                        <p class="st-muted">Transparent PNG or WebP works best. Uploading a new image replaces this channel's current selection.</p>
                     </div>
-                    <p class="hint">Use overrides for special schedules (Friday movie night, holidays, etc.).</p>
-                    <div id="override-list"></div>
-                </div>
-            </section>
+                </section>
 
-            <section id="tab-list" class="tab-panel">
-                <div class="card section-card">
-                    <div class="section-header">
-                        <h3>Spectral TV Lists</h3>
-                        <button type="button" id="btn-add-list" class="raised button-submit emby-button">Add from Jellyfin</button>
-                    </div>
-                    <p class="hint">Register Jellyfin playlists as Spectral TV lists. Use them in Lineups, Overrides, Special Presentations, and AI slot edits.</p>
-                    <div id="lists-table" class="data-table-wrap"></div>
-                </div>
-            </section>
-
-            <section id="tab-special" class="tab-panel">
-                <div class="toolbar lineup-toolbar">
-                    <label class="inline-field">
-                        <span>Channel</span>
-                        <select id="special-channel-select" class="emby-select"></select>
-                    </label>
-                    <button type="button" id="btn-add-special" class="raised button-submit emby-button">Add Presentation</button>
-                </div>
-                <p class="hint">Recurring day/time blocks that override AI or default lineup content on matching days. Use fixed items, metadata rules, or a registered Spectral TV list.</p>
-                <div id="special-list" class="data-table-wrap"></div>
-            </section>
-
-            <section id="tab-commercials" class="tab-panel">
-                <p>Tag commercial files in Jellyfin with <code>spectraltv-commercial</code>, or sync YouTube commercials from <a href="https://commercialbrainz.duckdns.org/" target="_blank" rel="noopener">CommercialBrainz</a>.</p>
-                <div class="toolbar">
-                    <button id="btn-sync-commercials" class="emby-button">Sync Jellyfin Library</button>
-                    <button id="btn-scan-blackframes" class="raised button-submit emby-button">Run Blackframe Scan</button>
-                </div>
-                <div class="card section-card">
-                    <h3>CommercialBrainz YouTube Pool</h3>
-                    <p class="hint">CommercialBrainz sync stores YouTube metadata only. At break time SpectralTV streams each spot directly into the channel (no local download). The Spectral TV Jellyfin Docker image includes <code>yt-dlp</code>; on Windows install yt-dlp and ensure it is on <code>PATH</code>.</p>
-                    <div class="form-grid">
-                        <label class="field"><span>Enabled</span><input id="cb-enabled" type="checkbox" class="emby-checkbox"></label>
-                        <label class="field"><span>Base URL</span><input id="cb-base-url" type="url" class="emby-input" value="https://commercialbrainz.duckdns.org" placeholder="https://commercialbrainz.duckdns.org"></label>
-                        <label class="field"><span>API token (optional)</span><input id="cb-api-token" type="password" class="emby-input" placeholder="Leave blank to keep saved token"></label>
-                        <label class="field"><span>Commercial pool</span>
-                            <select id="cb-pool-mode" class="emby-select">
-                                <option value="2">Jellyfin + CommercialBrainz</option>
-                                <option value="0">Jellyfin only</option>
-                                <option value="1">CommercialBrainz only</option>
-                            </select>
-                        </label>
-                        <label class="field"><span>Max sync results</span><input id="cb-max-sync" type="number" min="1" max="5000" class="emby-input" value="500"></label>
-                        <label class="field"><span>Min year</span><input id="cb-min-year" type="number" class="emby-input" placeholder="1980"></label>
-                        <label class="field"><span>Max year</span><input id="cb-max-year" type="number" class="emby-input" placeholder="1999"></label>
-                        <label class="field"><span>Decades (comma-separated)</span><input id="cb-decades" type="text" class="emby-input" placeholder="1980, 1990"></label>
-                        <label class="field"><span>Brands (comma-separated)</span><input id="cb-brands" type="text" class="emby-input" placeholder="McDonald's, Pepsi"></label>
-                        <label class="field"><span>Include tags</span><input id="cb-tags" type="text" class="emby-input" placeholder="fast food, holiday"></label>
-                        <label class="field"><span>Exclude tags</span><input id="cb-exclude-tags" type="text" class="emby-input" placeholder="banned"></label>
-                        <label class="field"><span>Genres / categories</span><input id="cb-genres" type="text" class="emby-input" placeholder="Comedy, Sports"></label>
-                        <label class="field"><span>Networks</span><input id="cb-networks" type="text" class="emby-input" placeholder="NBC, CBS"></label>
-                        <label class="field"><span>Target channels</span><input id="cb-channel-names" type="text" class="emby-input" placeholder="Nick at Nite, MTV"></label>
-                        <label class="field"><span>Min age limit</span><input id="cb-min-age" type="number" min="0" class="emby-input"></label>
-                        <label class="field"><span>Max age limit</span><input id="cb-max-age" type="number" min="0" class="emby-input"></label>
-                    </div>
-                    <div class="checkbox-grid">
-                        <label><input id="cb-allow-spoof" type="checkbox" class="emby-checkbox" checked> Allow spoof</label>
-                        <label><input id="cb-allow-fake" type="checkbox" class="emby-checkbox" checked> Allow fake</label>
-                        <label><input id="cb-allow-real" type="checkbox" class="emby-checkbox" checked> Allow real</label>
-                        <label><input id="cb-allow-ai" type="checkbox" class="emby-checkbox" checked> Allow AI-enhanced</label>
-                        <label><input id="cb-allow-latenight" type="checkbox" class="emby-checkbox" checked> Allow late night</label>
-                        <label><input id="cb-allow-adult" type="checkbox" class="emby-checkbox"> Allow adult-rated</label>
-                        <label><input id="cb-allow-banned" type="checkbox" class="emby-checkbox"> Allow banned</label>
-                    </div>
-                    <div class="actions">
-                        <button type="button" id="btn-save-brainz" class="raised button-submit emby-button">Save CommercialBrainz Filters</button>
-                        <button type="button" id="btn-preview-brainz" class="emby-button">Preview Matches</button>
-                        <button type="button" id="btn-sync-brainz" class="emby-button">Sync CommercialBrainz</button>
-                    </div>
-                    <div id="brainz-status" class="status-card"></div>
-                    <div id="brainz-preview" class="data-table-wrap"></div>
-                </div>
-                <div id="commercial-status" class="status-card"></div>
-                <div id="commercial-list" class="data-table-wrap"></div>
-            </section>
-
-            <section id="tab-logos" class="tab-panel">
-                <p>Import the <a href="https://github.com/binarygeek119/open-channel-logos/tree/spectraltv2" target="_blank" rel="noopener">Binarygeek119 Set (spectraltv2 branch)</a>, or create your own custom logo set.</p>
-                <p class="hint">Channel bugs live under Shows, Movies, and Music Videos Channels. Off-air Emergency Broadcast System slates are configured on the <strong>EBS</strong> tab.</p>
-                <div class="toolbar">
-                    <button id="btn-sync-logos" class="emby-button">Import / Refresh Binarygeek119 Set</button>
-                    <button id="btn-repair-logos" class="emby-button">Apply Logos to Channels</button>
-                    <button id="btn-create-logo-set" class="raised button-submit emby-button">Create Custom Set</button>
-                </div>
-                <div id="logo-repair-status" class="status-card hidden"></div>
-                <div id="logo-set-info"></div>
-            </section>
-
-            <section id="tab-ebs" class="tab-panel">
-                <div class="card section-card">
-                    <h2>Emergency Broadcast System</h2>
-                    <p class="hint">EBS plays when a channel has no scheduled media, when playback fails, or when a weather capture error occurs. Pick off-air video and audio independently — for example, color bars with a beep tone, or TV static with white noise.</p>
-                    <label class="field">
-                        <span>Off-air video</span>
-                        <select id="ebs-display-mode" class="emby-input">
-                            <option value="0">Slate image (stock or custom upload)</option>
-                            <option value="1">Color bars</option>
-                            <option value="2">TV static</option>
-                        </select>
-                    </label>
-                    <label class="field" id="ebs-slate-variant-field">
-                        <span>Stock slate variant</span>
-                        <select id="ebs-slate-variant" class="emby-input">
-                            <option value="0">USA (offlineusa.jpg)</option>
-                            <option value="1">International (offline.jpg)</option>
-                        </select>
-                    </label>
-                    <p class="hint" id="ebs-slate-variant-hint">Used when off-air video is set to slate image. Custom uploads below override the bundled stock image for each variant.</p>
-                    <label class="field" id="ebs-audio-mode-field">
-                        <span>Off-air audio</span>
-                        <select id="ebs-audio-mode" class="emby-input">
-                            <option value="0">Background music from Jellyfin library</option>
-                            <option value="1">White noise</option>
-                            <option value="2">Silence</option>
-                            <option value="3">Beep tone</option>
-                        </select>
-                    </label>
-                    <label class="field">
-                        <span>Background music source</span>
-                        <select id="ebs-music-source" class="emby-input">
-                            <option value="0">All music libraries</option>
-                            <option value="1">Specific music library</option>
-                        </select>
-                    </label>
-                    <label class="field" id="ebs-library-field">
-                        <span>Background music library</span>
-                        <select id="ebs-music-library" class="emby-input"></select>
-                    </label>
-                    <div class="actions" style="margin-bottom:1rem">
-                        <button type="button" id="btn-save-ebs" class="raised button-submit emby-button">Save EBS Settings</button>
-                    </div>
-                </div>
-                <div class="card section-card">
-                    <h3>Custom slate images</h3>
-                    <p class="hint">Upload PNG or JPG images to replace the bundled stock slates. Each variant can have one custom image.</p>
-                    <div class="ebs-upload-grid">
-                        <div class="ebs-upload-card">
-                            <h4>USA slate</h4>
-                            <p class="hint">Stock fallback: <code>offlineusa.jpg</code></p>
-                            <div id="ebs-usa-status" class="status-card"></div>
-                            <label class="field">
-                                <span>Upload image</span>
-                                <input id="ebs-usa-file" type="file" class="emby-input" accept=".png,.jpg,.jpeg,image/png,image/jpeg">
-                            </label>
-                            <div class="actions">
-                                <button type="button" id="btn-upload-ebs-usa" class="emby-button">Upload USA Slate</button>
-                                <button type="button" id="btn-remove-ebs-usa" class="emby-button">Remove Custom USA Slate</button>
+                <section id="st-panel-programming" class="st-panel" data-panel="programming">
+                    <div class="st-card">
+                        <div class="st-card-head"><div><h2>Programming mix</h2><p>Add whole shows, individual seasons or episodes, and movies. Spectral TV balances them by airtime.</p></div></div>
+                        <div id="st-program-empty" class="st-empty">Select a channel first.</div>
+                        <div id="st-program-content" class="st-hidden">
+                            <div id="st-program-summary" class="st-summary"></div>
+                            <div class="st-form-grid">
+                                <div class="st-field st-field-full st-search-wrap"><span>Search your Jellyfin library</span><input id="st-program-search" class="emby-input" type="search" autocomplete="off" placeholder="Search for a show, season, episode, or movie…"><div id="st-program-results" class="st-search-results"></div></div>
+                                <label class="st-field"><span>Starting airtime share</span><input id="st-program-share" class="emby-input" type="number" min="0.1" step="0.1" value="25"></label>
+                                <label class="st-field"><span>Episode order</span><select id="st-program-order" class="emby-select"><option value="0">Sequential</option><option value="1">Random</option></select></label>
                             </div>
+                            <p class="st-notice">Shares are relative. 50 / 30 / 20 means roughly 50%, 30%, and 20% of airtime even when episode lengths differ.</p>
+                            <div id="st-program-list" class="st-list"></div>
                         </div>
-                        <div class="ebs-upload-card">
-                            <h4>International slate</h4>
-                            <p class="hint">Stock fallback: <code>offline.jpg</code></p>
-                            <div id="ebs-international-status" class="status-card"></div>
-                            <label class="field">
-                                <span>Upload image</span>
-                                <input id="ebs-international-file" type="file" class="emby-input" accept=".png,.jpg,.jpeg,image/png,image/jpeg">
-                            </label>
-                            <div class="actions">
-                                <button type="button" id="btn-upload-ebs-international" class="emby-button">Upload International Slate</button>
-                                <button type="button" id="btn-remove-ebs-international" class="emby-button">Remove Custom International Slate</button>
+                    </div>
+                </section>
+
+                <section id="st-panel-breaks" class="st-panel" data-panel="breaks">
+                    <div class="st-card">
+                        <div class="st-card-head"><div><h2>Breaks between programs</h2><p>Optional promos, bumpers, commercials, and station IDs. These never change programming percentages.</p></div></div>
+                        <div id="st-breaks-empty" class="st-empty">Select a channel first.</div>
+                        <div id="st-breaks-content" class="st-hidden">
+                            <label class="st-check"><input id="st-breaks-enabled" type="checkbox"><span><strong>Insert breaks</strong><small>When off, programs play back-to-back and all items below are ignored.</small></span></label>
+                            <div id="st-break-settings" class="st-hidden">
+                                <div class="st-field" style="margin-top:1rem"><span>How often should a break appear?</span>
+                                    <div class="st-break-preset">
+                                        <label class="st-choice"><input type="radio" name="st-break-frequency" value="25"><span>Rarely</span></label>
+                                        <label class="st-choice"><input type="radio" name="st-break-frequency" value="50"><span>Sometimes</span></label>
+                                        <label class="st-choice"><input type="radio" name="st-break-frequency" value="75"><span>Often</span></label>
+                                        <label class="st-choice"><input type="radio" name="st-break-frequency" value="100"><span>Every program</span></label>
+                                    </div>
+                                </div>
+                                <details><summary>Advanced break timing</summary><div class="st-form-grid">
+                                    <label class="st-field"><span>Minimum items per break</span><input id="st-break-min" class="emby-input" type="number" min="0" max="10" value="1"></label>
+                                    <label class="st-field"><span>Maximum items per break</span><input id="st-break-max" class="emby-input" type="number" min="0" max="10" value="2"></label>
+                                    <label class="st-field"><span>Maximum break length (seconds)</span><input id="st-break-seconds" class="emby-input" type="number" min="0" max="3600" value="180"></label>
+                                    <label class="st-field"><span>Do not repeat within this many items</span><input id="st-break-repeat" class="emby-input" type="number" min="0" max="100" value="12"></label>
+                                </div></details>
+                                <div class="st-actions"><button type="button" id="st-save-breaks" class="st-button st-button-primary">Save break settings</button></div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </section>
 
-            <section id="tab-ai" class="tab-panel">
-                <div class="card section-card">
-                    <h2>AI Lineup Generator</h2>
-                    <p id="ai-disabled-note" class="hint hint-warning hidden">AI lineup generation is disabled. Configure API keys below, then enable the switch to generate lineups.</p>
-                    <label class="field checkbox-field">
-                        <input type="checkbox" id="ai-enabled">
-                        <span>Enable AI lineup generation</span>
-                    </label>
-                    <label class="field checkbox-field">
-                        <input type="checkbox" id="ai-auto-apply-channel-add">
-                        <span>Auto-apply AI settings and lineup when channels are added (14-day playout rebuild)</span>
-                    </label>
-                    <label class="field checkbox-field">
-                        <input type="checkbox" id="ai-auto-apply-all-on-save">
-                        <span>Apply AI lineups to all eligible channels when saving settings (14-day playout rebuild)</span>
-                    </label>
-                    <label class="field checkbox-field">
-                        <input type="checkbox" id="ai-auto-tag-weekly">
-                        <span>Weekly auto-tag library items with spectraltv-* channel tags (Sunday 2:00 AM scheduled task)</span>
-                    </label>
-                    <label class="field checkbox-field">
-                        <input type="checkbox" id="ai-use-auto-tagged-catalog">
-                        <span>Use auto-tagged spectraltv-* tags for faster AI catalog loading</span>
-                    </label>
-                    <div class="actions" style="margin-bottom:1rem">
-                        <button type="button" id="btn-save-ai-settings" class="raised button-submit emby-button">Save AI Settings</button>
-                        <button type="button" id="btn-test-ai" class="emby-button">Test Connection</button>
-                    </div>
-                    <p class="hint">Test Connection works before enabling AI. Enter an API key, pick the matching provider, then test. Save settings after a successful test.</p>
-                </div>
-                <div class="card section-card">
-                    <h3>Provider settings</h3>
-                    <label class="field">
-                        <span>Default provider</span>
-                        <select id="ai-default-provider" class="emby-input">
-                            <option value="0">OpenAI (ChatGPT)</option>
-                            <option value="1">Venice</option>
-                        </select>
-                    </label>
-                    <label class="field">
-                        <span>OpenAI API key</span>
-                        <input id="ai-openai-key" type="password" class="emby-input" autocomplete="off" placeholder="Leave blank to keep existing key">
-                    </label>
-                    <label class="field">
-                        <span>OpenAI model</span>
-                        <input id="ai-openai-model" type="text" class="emby-input" placeholder="gpt-4o-mini">
-                    </label>
-                    <label class="field">
-                        <span>Venice API key</span>
-                        <input id="ai-venice-key" type="password" class="emby-input" autocomplete="off" placeholder="Leave blank to keep existing key">
-                    </label>
-                    <label class="field">
-                        <span>Venice model</span>
-                        <input id="ai-venice-model" type="text" class="emby-input" placeholder="gpt-4o-mini">
-                    </label>
-                    <p id="ai-key-status" class="hint"></p>
-                    <p class="hint">AI lineups build up to <strong>14 days</strong> of playout. Spectral TV auto-extends the schedule as each day ends. Auto-apply sets content mix and playout template from channel rules, generates the lineup, and rebuilds playout. The scheduled task adds <strong>one day</strong> when the horizon drops to 13 days instead of rebuilding all 14. Queued new channels can also be processed from <strong>Dashboard → Scheduled Tasks → Spectral TV AI Lineup Auto-Apply (Channel Add)</strong>.</p>
-                </div>
-                <div class="card section-card">
-                    <div class="section-header-row">
-                        <h3>Weather guide metadata</h3>
-                        <div class="actions section-header-actions">
-                            <button type="button" id="btn-weather-guide-cache-generate" class="emby-button">Generate Weather Guide Cache</button>
-                            <button type="button" id="btn-weather-guide-cache-clear" class="emby-button">Delete Weather Guide Cache</button>
+                    <div id="st-filler-card" class="st-card st-hidden">
+                        <div class="st-card-head"><div><h2>Break library</h2><p>Choose the individual video clips Spectral TV can insert.</p></div></div>
+                        <div class="st-form-grid">
+                            <div class="st-field st-field-full st-search-wrap"><span>Search your Jellyfin library</span><input id="st-filler-search" class="emby-input" type="search" autocomplete="off" placeholder="Search for a promo, bumper, commercial, or station ID…"><div id="st-filler-results" class="st-search-results"></div></div>
+                            <label class="st-field"><span>Clip type</span><select id="st-filler-kind" class="emby-select"><option value="0">Promo</option><option value="1">Bumper</option><option value="2">Commercial</option><option value="3">Station ID</option></select></label>
+                            <label class="st-field"><span>Selection weight</span><input id="st-filler-weight" class="emby-input" type="number" min="1" max="1000" value="1"></label>
                         </div>
+                        <div id="st-filler-list" class="st-list"></div>
                     </div>
-                    <p class="hint">When AI is enabled, Spectral TV generates TV-guide-style titles and descriptions for each weather channel location and hour of day (0–23). Generation runs once when you click <strong>Generate Weather Guide Cache</strong>, then the same metadata is reused every day for matching time slots. EPG and playout builds read the cache only — they do not call the LLM.</p>
-                    <p id="ai-weather-guide-cache-status" class="hint">Loading weather guide cache status…</p>
-                </div>
-                <div class="card section-card">
-                    <div class="section-header-row">
-                        <h3>Channel auto-tagging</h3>
-                        <div class="actions section-header-actions">
-                            <button type="button" id="btn-channel-tagging-run" class="emby-button">Run Tagging Now</button>
-                            <button type="button" id="btn-channel-tagging-full" class="emby-button">Full Library Retag</button>
-                        </div>
-                    </div>
-                    <p class="hint">Spectral TV can write <code>spectraltv-*</code> tags onto movies, series, and music videos using the same channel rules used for AI lineups. When enabled, AI catalog loading queries those tags first so Generate All is much faster on large libraries. Run once before your first Generate All, or enable the weekly scheduled task to pick up new media automatically.</p>
-                    <p id="ai-channel-tagging-status" class="hint">Loading channel tagging status…</p>
-                </div>
-                <div class="card section-card">
-                    <div class="section-header-row">
-                        <h3>Channel lineups</h3>
-                        <div class="actions section-header-actions">
-                            <button type="button" id="btn-ai-generate-all" class="emby-button">Generate All Channels</button>
-                            <button type="button" id="btn-ai-cancel-generate-all" class="emby-button hidden">Cancel Generate All</button>
-                        </div>
-                    </div>
-                    <p id="ai-generate-all-status" class="hint hidden"></p>
-                    <p class="hint">Pick a <strong>playout template</strong> to structure dayparts (morning cartoons, primetime, etc.). Channel rules define content scope; fine-tune adds extra instructions. <strong>Generate All</strong> runs in the background, one channel and one day at a time, until each channel has 14 days of playout.</p>
-                    <div id="ai-channels-list" class="ai-channels-list"></div>
-                </div>
-                <div id="ai-preview-panel" class="card section-card hidden">
-                    <h3 id="ai-preview-title">AI Preview</h3>
-                    <p id="ai-preview-summary" class="hint"></p>
-                    <div id="ai-preview-grid" class="lineup-grid ai-preview-grid"></div>
-                    <div class="actions">
-                        <button type="button" id="btn-ai-apply" class="raised button-submit emby-button">Apply Lineup + Rebuild Guide</button>
-                        <button type="button" id="btn-ai-discard" class="emby-button">Discard</button>
-                    </div>
-                </div>
-            </section>
+                </section>
 
-            <section id="tab-weather" class="tab-panel">
-                <div class="card section-card">
-                    <h3>Self-hosted WeatherStar (Docker)</h3>
-                    <p class="hint hint-warning"><strong>Host WeatherStar locally.</strong> Do not point production channels at a public demo URL.</p>
-                    <p class="hint">Spectral TV can start official Docker images for WeatherStar 4000+ and 3000+. Docker must be installed and the Jellyfin user must be able to run <code>docker</code>. If Jellyfin runs in Docker, mount <code>/var/run/docker.sock</code> and add <code>extra_hosts: ["host.docker.internal:host-gateway"]</code> so localhost WeatherStar URLs resolve from the Jellyfin container.</p>
-                    <div class="weather-docker-grid">
-                        <div class="weather-docker-panel">
-                            <h4>WeatherStar 4000+ (ws4kp)</h4>
-                            <p class="hint"><a href="https://github.com/netbymatt/ws4kp" target="_blank" rel="noopener">netbymatt/ws4kp</a> · port 8080</p>
-                            <div id="ws4kp-docker-status" class="status-card"></div>
-                            <label class="field">
-                                <span>Host port</span>
-                                <input id="ws4kp-host-port" type="number" min="1" max="65535" class="emby-input" value="8080">
-                            </label>
-                            <label class="field">
-                                <span>Docker image</span>
-                                <input id="ws4kp-image" type="text" class="emby-input" value="ghcr.io/netbymatt/ws4kp">
-                            </label>
-                            <div class="actions">
-                                <button type="button" id="btn-ws4kp-start" class="raised button-submit emby-button">Start ws4kp</button>
-                                <button type="button" id="btn-ws4kp-stop" class="emby-button">Stop</button>
-                                <button type="button" id="btn-ws4kp-use-url" class="emby-button">Use ws4kp URL</button>
-                            </div>
-                        </div>
-                        <div class="weather-docker-panel">
-                            <h4>WeatherStar 3000+ (ws3kp)</h4>
-                            <p class="hint"><a href="https://github.com/netbymatt/ws3kp" target="_blank" rel="noopener">netbymatt/ws3kp</a> · port 8083</p>
-                            <div id="ws3kp-docker-status" class="status-card"></div>
-                            <label class="field">
-                                <span>Host port</span>
-                                <input id="ws3kp-host-port" type="number" min="1" max="65535" class="emby-input" value="8083">
-                            </label>
-                            <label class="field">
-                                <span>Docker image</span>
-                                <input id="ws3kp-image" type="text" class="emby-input" value="ghcr.io/netbymatt/ws3kp">
-                            </label>
-                            <div class="actions">
-                                <button type="button" id="btn-ws3kp-start" class="raised button-submit emby-button">Start ws3kp</button>
-                                <button type="button" id="btn-ws3kp-stop" class="emby-button">Stop</button>
-                                <button type="button" id="btn-ws3kp-use-url" class="emby-button">Use ws3kp URL</button>
-                            </div>
-                        </div>
+                <section id="st-panel-finish" class="st-panel" data-panel="finish">
+                    <div class="st-card">
+                        <div class="st-card-head"><div><h2>Build this channel</h2><p>Generate the wall-clock schedule that powers playback and the Jellyfin guide.</p></div></div>
+                        <div id="st-finish-empty" class="st-empty">Select a channel first.</div>
+                        <div id="st-finish-content" class="st-hidden"><div id="st-readiness" class="st-readiness"></div><div class="st-actions"><button type="button" id="st-rebuild" class="st-button st-button-primary">Build channel schedule</button><span id="st-rebuild-status" class="st-muted"></span></div></div>
                     </div>
-                </div>
-                <div class="card section-card">
-                    <h3>Docker startup</h3>
-                    <p class="hint">Pre-start WeatherStar when Jellyfin boots so the first weather tune does not wait on image pulls. Runs in the background a few seconds after startup.</p>
-                    <label class="field checkbox-field">
-                        <input type="checkbox" id="weather-auto-start-ws4kp">
-                        <span>Auto-start WeatherStar Docker on Jellyfin startup (ws4kp or ws3kp matching your base URL; ws4kp if URL is not local)</span>
-                    </label>
-                    <label class="field checkbox-field">
-                        <input type="checkbox" id="weather-auto-wide-169" checked>
-                        <span>Auto-set <code>wide=true</code> for 16:9 weather channels (<code>wide=false</code> for 4:3)</span>
-                    </label>
-                </div>
-                <div class="card section-card">
-                    <h3>WeatherStar base URL</h3>
-                    <p class="hint">Paste a full ws4kp permalink to import your display settings, or edit the base URL and query string separately. Spectral TV merges each channel&apos;s <code>latLonQuery</code>, forces <code>kiosk=true</code>, and can set <code>wide</code> from the channel aspect ratio when capturing.</p>
-                    <label class="field">
-                        <span>Import full permalink</span>
-                        <input id="weather-full-permalink" type="url" class="emby-input" placeholder="http://192.168.1.2:8082/?hazards=true&amp;...">
-                    </label>
-                    <div class="actions" style="margin-bottom:1rem">
-                        <button type="button" id="btn-import-weather-permalink" class="emby-button">Import permalink settings</button>
-                    </div>
-                    <label class="field">
-                        <span>WeatherStar base URL</span>
-                        <input id="weather-base-url" type="url" class="emby-input" placeholder="http://127.0.0.1:8080">
-                    </label>
-                    <label class="field">
-                        <span>WeatherStar display settings (permalink query)</span>
-                        <textarea id="weather-permalink-query" class="emby-input" rows="5" placeholder="hazards=true&amp;current-weather=true&amp;..."></textarea>
-                    </label>
-                    <p class="hint">Do not include <code>latLonQuery</code>, <code>latLon</code>, <code>txtLocation</code>, <code>kiosk</code>, or <code>wide</code> here when auto-wide is enabled — Spectral TV sets those per channel at capture time.</p>
-                    <div class="actions">
-                        <button type="button" id="btn-save-weather" class="raised button-submit emby-button">Save Weather Settings</button>
-                        <button type="button" id="btn-use-test-weather-url" class="emby-button">Use jmthornton test URL</button>
-                    </div>
-                </div>
-            </section>
 
-            <section id="tab-playwright" class="tab-panel">
-                <div class="card section-card">
-                    <h3>Playwright Chromium sidecar (Docker)</h3>
-                    <p class="hint">Weather channels capture live WeatherStar pages with headless Chromium. On Linux, Spectral TV runs Chromium in Docker (<code>spectraltv-playwright-chromium</code>) and connects over CDP. Docker must be installed and the Jellyfin user must be able to run <code>docker</code>.</p>
-                    <p class="hint">If Jellyfin runs in Docker, mount <code>/var/run/docker.sock</code>. Spectral TV shares Jellyfin&apos;s network namespace so CDP on <code>127.0.0.1:9222</code> is reachable. On Unraid, add <code>FINTV_JELLYFIN_CONTAINER=Jellyfin</code> to the Jellyfin container extra variables if auto-detect fails. After recreating the Jellyfin container, always Stop then Start the sidecar here (or run <code>docker rm -f spectraltv-playwright-chromium</code> on the host).</p>
-                    <div id="playwright-docker-status" class="status-card"></div>
-                    <div class="actions">
-                        <button type="button" id="btn-playwright-start" class="raised button-submit emby-button">Start sidecar</button>
-                        <button type="button" id="btn-playwright-stop" class="emby-button">Stop</button>
-                    </div>
-                </div>
-                <div class="card section-card">
-                    <h3>Startup</h3>
-                    <p class="hint">Pre-start the Playwright sidecar when Jellyfin boots so the first weather tune does not wait on image pulls. Runs in the background a few seconds after startup.</p>
-                    <label class="field checkbox-field">
-                        <input type="checkbox" id="playwright-auto-start">
-                        <span>Auto-start Playwright Chromium sidecar (<code>spectraltv-playwright-chromium</code>) on Jellyfin startup</span>
-                    </label>
-                    <div class="actions">
-                        <button type="button" id="btn-save-playwright" class="raised button-submit emby-button">Save Playwright Settings</button>
-                    </div>
-                </div>
-            </section>
-
-            <section id="tab-general" class="tab-panel">
-                <div class="card section-card">
-                    <h2>General</h2>
-                    <p class="hint">Plugin-wide settings. Debug logging writes extra detail to the Jellyfin server log for troubleshooting AI channel building and playout.</p>
-                    <label class="field checkbox-field">
-                        <input id="general-debug-logging" type="checkbox">
-                        <span>Debug logging (verbose developer logs)</span>
-                    </label>
-                    <p class="hint">When enabled, Spectral TV logs detailed AI lineup, catalog, LLM, and playout build steps with an <code>[Spectral TV AI]</code> prefix. Leave off for normal operation.</p>
-                    <label class="field">
-                        <span>Schedule time zone</span>
-                        <select id="general-schedule-tz" class="emby-input"></select>
-                    </label>
-                    <p class="hint">Used for EPG, weather guide cache hours, and playout scheduling. Offsets reflect the current DST rules on this Jellyfin server.</p>
-                    <label class="field">
-                        <span>Playout days to build (1–14)</span>
-                        <input id="general-playout-days" type="number" min="1" max="14" step="1" class="emby-input">
-                    </label>
-                    <div class="actions">
-                        <button type="button" id="btn-save-general" class="raised button-submit emby-button">Save General Settings</button>
-                    </div>
-                </div>
-            </section>
-
-            <section id="tab-setup" class="tab-panel">
-                <div class="card">
-                    <h2>Jellyfin Live TV URLs</h2>
-                    <p class="hint">Jellyfin fetches these URLs from the server itself. They must not require login and must use an address Jellyfin can reach (not <code>localhost</code> unless Jellyfin runs on the same machine and resolves it).</p>
-                    <label class="field">
-                        <span>Public server URL (optional override)</span>
-                        <input id="setup-public-base" type="url" class="emby-input" placeholder="http://192.168.1.50:8096">
-                    </label>
-                    <p class="hint">Configure off-air Emergency Broadcast System playback on the <strong>EBS</strong> tab.</p>
-                    <div class="actions" style="margin-bottom:1rem">
-                        <button type="button" id="btn-save-setup" class="raised button-submit emby-button">Save &amp; Refresh URLs</button>
-                    </div>
-                    <p class="hint">Detected base URL: <code id="setup-base-url"></code></p>
-                    <div class="url-row">
-                        <div class="url-block">
-                            <strong>M3U Tuner URL</strong>
-                            <code id="setup-m3u"></code>
+                    <div class="st-card">
+                        <div class="st-card-head"><div><h2>Connect to Jellyfin Live TV</h2><p>This one-time setup makes every enabled Spectral TV channel available to normal Jellyfin apps.</p></div></div>
+                        <label class="st-field"><span>Server address used in generated links</span><input id="st-public-base" class="emby-input" type="url" placeholder="http://192.168.1.50:8096"></label>
+                        <div class="st-actions"><button type="button" id="st-save-base" class="st-button">Save server address</button></div>
+                        <div style="display:grid;gap:.6rem;margin-top:1rem">
+                            <div class="st-url"><code id="st-m3u-url">Loading…</code><button type="button" class="st-button st-button-small" data-copy="st-m3u-url">Copy M3U</button></div>
+                            <div class="st-url"><code id="st-xmltv-url">Loading…</code><button type="button" class="st-button st-button-small" data-copy="st-xmltv-url">Copy XMLTV</button></div>
                         </div>
-                        <button type="button" class="emby-button btn-copy" data-copy-target="setup-m3u">Copy</button>
-                        <a id="setup-m3u-test" class="emby-button" target="_blank" rel="noopener">Test</a>
+                        <ol class="st-steps-list"><li>In Jellyfin, open <strong>Dashboard → Live TV</strong>.</li><li>Add an <strong>M3U tuner</strong> and paste the M3U address.</li><li>Add an <strong>XMLTV guide provider</strong> and paste the XMLTV address.</li><li>Refresh channels and guide data.</li></ol>
                     </div>
-                    <div class="url-row">
-                        <div class="url-block">
-                            <strong>XMLTV Guide URL</strong>
-                            <code id="setup-epg"></code>
-                        </div>
-                        <button type="button" class="emby-button btn-copy" data-copy-target="setup-epg">Copy</button>
-                        <a id="setup-epg-test" class="emby-button" target="_blank" rel="noopener">Test</a>
-                    </div>
-                    <ol id="setup-steps"></ol>
-                </div>
-            </section>
 
-            <section id="tab-tasks" class="tab-panel">
-                <div class="card">
-                    <h2>Maintenance</h2>
-                    <p class="hint">Rebuild playout timelines for all enabled channels after bulk lineup changes.</p>
-                    <button id="btn-rebuild-all" class="raised button-submit emby-button">Rebuild All Playouts</button>
-                    <div id="task-status" class="status-card"></div>
-                </div>
-            </section>
+                    <div class="st-card"><details><summary>Server settings</summary><div class="st-form-grid">
+                        <label class="st-field"><span>Schedule time zone</span><select id="st-timezone" class="emby-select"></select></label>
+                        <label class="st-field"><span>Guide days to build</span><input id="st-guide-days" class="emby-input" type="number" min="1" max="14"></label>
+                        <label class="st-check"><input id="st-debug" type="checkbox"><span><strong>Verbose logging</strong><small>Use only while troubleshooting.</small></span></label>
+                    </div><div class="st-actions"><button type="button" id="st-save-server" class="st-button">Save server settings</button><button type="button" id="st-rebuild-all" class="st-button">Rebuild every enabled channel</button></div></details></div>
+                </section>
+            </main>
         </div>
+    </div>
 
-        <div id="modal-backdrop" class="modal-backdrop hidden">
-            <div class="modal" role="dialog" aria-modal="true">
-                <div class="modal-header">
-                    <h3 id="modal-title"></h3>
-                    <button type="button" id="modal-close" class="btn-ghost" title="Close">&times;</button>
-                </div>
-                <div id="modal-body" class="modal-body"></div>
-                <div id="modal-footer" class="modal-footer"></div>
-            </div>
+    <div id="st-toast" class="st-toast st-hidden" role="status" aria-live="polite"></div>
+    <div id="st-modal" class="st-modal st-hidden" role="dialog" aria-modal="true" aria-labelledby="st-modal-title">
+        <div class="st-card st-modal-card">
+            <div class="st-card-head"><div><h2 id="st-modal-title">Create a channel</h2><p>Start with the basics. Programming comes next.</p></div><button type="button" id="st-modal-close" class="st-button st-button-small">Close</button></div>
+            <form id="st-new-channel-form"><div class="st-form-grid">
+                <label class="st-field"><span>Name</span><input id="st-new-name" class="emby-input" type="text" required placeholder="Cartoon Network"></label>
+                <label class="st-field"><span>Channel number</span><input id="st-new-number" class="emby-input" type="number" min="1" step="0.1" required value="1"></label>
+                <label class="st-field st-field-full"><span>Picture format</span><select id="st-new-aspect" class="emby-select"><option value="0">16:9 widescreen</option><option value="1">4:3 classic television</option></select></label>
+            </div><div class="st-actions"><button type="submit" class="st-button st-button-primary">Create channel</button><button type="button" id="st-modal-cancel" class="st-button">Cancel</button></div></form>
         </div>
+    </div>
 </div>

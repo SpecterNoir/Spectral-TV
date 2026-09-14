@@ -38,14 +38,11 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Fetch bundled Binarygeek119 logos
-        run: python3 scripts/fetch-binarygeek119-logos.py Jellyfin.Plugin.SpectralTV/Assets/logos/binarygeek119
+      - name: Validate admin UI contracts
+        run: python3 scripts/validate-admin-ui.py
 
       - name: Restore NuGet packages
         run: dotnet restore Jellyfin.Plugin.SpectralTV/Jellyfin.Plugin.SpectralTV.csproj
-
-      - name: Update build.yaml logo artifacts
-        run: python3 scripts/update-build-artifacts.py
 
       - name: Mark development build
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/weighted-channels'
@@ -73,9 +70,6 @@ jobs:
               count=1)
           path.write_text(text, encoding='utf-8')
           PY
-
-      - name: Prepare simplified admin UI
-        run: python3 scripts/prepare-admin-ui.py
 
       - name: Build Jellyfin Plugin
         uses: oddstr13/jellyfin-plugin-repository-manager@9497a0a499416cc572ed2e07a391d9f943a37b4d
@@ -174,7 +168,7 @@ jobs:
               "imageUrl": "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png",
               "versions": [{
                   "version": version,
-                  "changelog": "Development beta for Jellyfin 12 Linux/Synology with a simplified admin interface, TV/movie-only channel creation, startup isolation, package safety validation, and automated Jellyfin startup smoke testing.",
+                  "changelog": "Ground-up Spectral TV overhaul: one guided channel workspace, direct Jellyfin library programming, optional breaks and logos, retired inherited workflows, UI contract validation, and Linux startup smoke testing.",
                   "targetAbi": "12.0.0.0",
                   "sourceUrl": f"https://github.com/{repo}/releases/download/beta/{zipname}",
                   "checksum": checksum,

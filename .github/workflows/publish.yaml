@@ -50,16 +50,11 @@ jobs:
       - name: Install JPRM
         run: python -m pip install --upgrade jprm
 
-      - name: Fetch bundled Binarygeek119 logos
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 scripts/fetch-binarygeek119-logos.py Jellyfin.Plugin.SpectralTV/Assets/logos/binarygeek119
+      - name: Validate admin UI contracts
+        run: python3 scripts/validate-admin-ui.py
 
       - name: Restore NuGet packages
         run: dotnet restore Jellyfin.Plugin.SpectralTV/Jellyfin.Plugin.SpectralTV.csproj
-
-      - name: Update build.yaml logo artifacts
-        run: python3 scripts/update-build-artifacts.py
 
       - name: Build plugin zip
         id: build
@@ -106,6 +101,25 @@ jobs:
           PY
         env:
           ZIPFILE: ${{ steps.build.outputs.zipfile }}
+
+      - name: Sanitize Linux/Synology plugin package
+        run: |
+          set -euo pipefail
+          artifact="${{ steps.build.outputs.zipfile }}"
+          artifact_abs=$(realpath "$artifact")
+          tmpdir=$(mktemp -d)
+          unzip -q "$artifact_abs" -d "$tmpdir"
+          rm -rf "$tmpdir"/runtimes/win-* "$tmpdir"/runtimes/osx-* 2>/dev/null || true
+          find "$tmpdir" -type d -empty -delete 2>/dev/null || true
+          rm -f "$artifact_abs"
+          (cd "$tmpdir" && zip -qr "$artifact_abs" .)
+          rm -rf "$tmpdir"
+
+      - name: Validate plugin package safety
+        run: python3 scripts/validate-plugin-package.py "${{ steps.build.outputs.zipfile }}"
+
+      - name: Smoke test Spectral TV inside Jellyfin 12 Linux
+        run: bash scripts/smoke-test-jellyfin-linux.sh "${{ steps.build.outputs.zipfile }}"
 
       - name: Attach zip to GitHub Release
         uses: softprops/action-gh-release@v2

@@ -1,5 +1,4 @@
 using Jellyfin.Plugin.SpectralTV.Domain;
-using Jellyfin.Plugin.SpectralTV.Services;
 
 namespace Jellyfin.Plugin.SpectralTV.Api;
 
@@ -14,8 +13,6 @@ public class ChannelUpsertRequest
 
     public bool Enabled { get; set; } = true;
 
-    public ChannelContentType ContentType { get; set; }
-
     public AspectRatioMode AspectRatio { get; set; }
 
     public bool ScanlinesEnabled { get; set; }
@@ -26,10 +23,6 @@ public class ChannelUpsertRequest
 
     public string? LogoFileName { get; set; }
 
-    public string AudioLanguage { get; set; } = "eng";
-
-    public string? WeatherLocationQuery { get; set; }
-
     public Channel ToChannel()
     {
         var channel = new Channel
@@ -37,22 +30,13 @@ public class ChannelUpsertRequest
             Number = Number,
             Name = Name,
             Enabled = Enabled,
-            ContentType = ContentType,
+            ContentType = ChannelContentType.TvShow,
             AspectRatio = AspectRatio,
             ScanlinesEnabled = ScanlinesEnabled,
             BugPlacement = BugPlacement,
             LogoSetId = LogoSetId,
-            LogoFileName = LogoFileName,
-            AudioLanguage = AudioLanguage,
-            WeatherLocationQuery = WeatherLocationQuery
+            LogoFileName = LogoFileName
         };
-
-        if (channel.ContentType == ChannelContentType.Weather)
-        {
-            channel.WeatherLocationQuery = string.IsNullOrWhiteSpace(channel.WeatherLocationQuery)
-                ? WeatherStarChannelService.DefaultWeatherLocationQuery
-                : channel.WeatherLocationQuery.Trim();
-        }
 
         return channel;
     }

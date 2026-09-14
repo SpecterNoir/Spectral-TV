@@ -17,26 +17,18 @@ public class ChannelsController : ControllerBase
 {
     private readonly ChannelService _channels;
     private readonly StreamService _stream;
-    private readonly LineupGeneratorService _lineupGenerator;
-    private readonly AiChannelAutoApplyService _aiAutoApply;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChannelsController"/> class.
     /// </summary>
     /// <param name="channels">Channel service.</param>
     /// <param name="stream">Stream service.</param>
-    /// <param name="lineupGenerator">Lineup generator service.</param>
-    /// <param name="aiAutoApply">AI auto-apply service.</param>
     public ChannelsController(
         ChannelService channels,
-        StreamService stream,
-        LineupGeneratorService lineupGenerator,
-        AiChannelAutoApplyService aiAutoApply)
+        StreamService stream)
     {
         _channels = channels;
         _stream = stream;
-        _lineupGenerator = lineupGenerator;
-        _aiAutoApply = aiAutoApply;
     }
 
     /// <summary>
@@ -92,7 +84,7 @@ public class ChannelsController : ControllerBase
     }
 
     /// <summary>
-    /// Creates a new channel with a default 48-slot lineup.
+    /// Creates a new channel ready for weighted programming.
     /// </summary>
     /// <param name="request">Channel definition.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -103,8 +95,6 @@ public class ChannelsController : ControllerBase
         try
         {
             var created = await _channels.CreateAsync(request.ToChannel(), cancellationToken);
-            await BuildWeatherPlayoutIfNeededAsync(created, cancellationToken);
-            _aiAutoApply.QueueAutoApplyForChannel(created.Id);
             return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
         }
         catch (ArgumentException ex)
@@ -131,7 +121,6 @@ public class ChannelsController : ControllerBase
                 return NotFound();
             }
 
-            await BuildWeatherPlayoutIfNeededAsync(updated, cancellationToken);
             return updated;
         }
         catch (ArgumentException ex)
@@ -150,17 +139,5 @@ public class ChannelsController : ControllerBase
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         return await _channels.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
-    }
-
-    private async Task BuildWeatherPlayoutIfNeededAsync(Channel channel, CancellationToken cancellationToken)
-    {
-        if (channel.ContentType != ChannelContentType.Weather)
-        {
-            return;
-        }
-
-        var start = DateTime.UtcNow.Date;
-        var end = PlayoutScheduleHelper.GetHorizonEndUtc(start);
-        await _lineupGenerator.BuildPlayoutAsync(channel, start, end, PlayoutBuildMode.ReplaceWindow, cancellationToken);
     }
 }
