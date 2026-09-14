@@ -1,5 +1,4 @@
 using Jellyfin.Plugin.SpectralTV.Domain;
-using Jellyfin.Plugin.SpectralTV.Services;
 
 namespace Jellyfin.Plugin.SpectralTV.Api;
 
@@ -28,11 +27,20 @@ public class ChannelUpsertRequest
 
     public string AudioLanguage { get; set; } = "eng";
 
+    /// <summary>
+    /// Retained only so older saved request/config shapes can still deserialize safely.
+    /// Weather channels are no longer supported.
+    /// </summary>
     public string? WeatherLocationQuery { get; set; }
 
     public Channel ToChannel()
     {
-        var channel = new Channel
+        if (ContentType is not ChannelContentType.TvShow and not ChannelContentType.Movie)
+        {
+            throw new ArgumentException("Spectral TV supports TV Show and Movie channels only.");
+        }
+
+        return new Channel
         {
             Number = Number,
             Name = Name,
@@ -44,16 +52,7 @@ public class ChannelUpsertRequest
             LogoSetId = LogoSetId,
             LogoFileName = LogoFileName,
             AudioLanguage = AudioLanguage,
-            WeatherLocationQuery = WeatherLocationQuery
+            WeatherLocationQuery = null
         };
-
-        if (channel.ContentType == ChannelContentType.Weather)
-        {
-            channel.WeatherLocationQuery = string.IsNullOrWhiteSpace(channel.WeatherLocationQuery)
-                ? WeatherStarChannelService.DefaultWeatherLocationQuery
-                : channel.WeatherLocationQuery.Trim();
-        }
-
-        return channel;
     }
 }
