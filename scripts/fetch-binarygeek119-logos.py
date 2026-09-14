@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download Spectral TV channel logos from the pinned open-channel-logos source revision."""
+"""Download Spectral TV TV/movie channel logos from the pinned open-channel-logos source revision."""
 
 from __future__ import annotations
 
@@ -21,9 +21,7 @@ LOGO_PREFIXES = (
     "Movies/",
     "News/",
     "Shows/",
-    "Music Videos Channels/",
     "The Holiday Channel/",
-    "Weather/",
 )
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 
@@ -87,7 +85,7 @@ def main() -> int:
         and is_image(item["path"])
     ]
 
-    print(f"Bundling {len(files)} logos from {REPO}@{GIT_REF} into {output_dir}")
+    print(f"Bundling {len(files)} TV/movie logos from {REPO}@{GIT_REF} into {output_dir}")
     for item in files:
         relative = item["path"]
         destination = output_dir / relative.replace("/", "\\") if sys.platform == "win32" else output_dir / relative
