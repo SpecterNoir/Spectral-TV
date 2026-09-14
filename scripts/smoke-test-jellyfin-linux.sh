@@ -13,7 +13,13 @@ logfile="$workdir/jellyfin.log"
 
 cleanup() {
   docker rm -f "$container" >/dev/null 2>&1 || true
-  rm -rf "$workdir"
+
+  # Jellyfin writes its mounted config as the container user, which is not always the
+  # GitHub runner UID. Restrict cleanup to the mktemp directory and use sudo so a
+  # successful smoke test cannot be reported as failed just because of file ownership.
+  if [[ -n "${workdir:-}" && "$workdir" == /tmp/* ]]; then
+    sudo rm -rf -- "$workdir" >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
 
