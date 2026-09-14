@@ -18,6 +18,14 @@ public class SpectralTvDbContext : DbContext
 
     public DbSet<ChannelFillerSource> ChannelFillerSources => Set<ChannelFillerSource>();
 
+    public DbSet<OnDemandChannel> OnDemandChannels => Set<OnDemandChannel>();
+
+    public DbSet<OnDemandSource> OnDemandSources => Set<OnDemandSource>();
+
+    public DbSet<OnDemandFillerSource> OnDemandFillerSources => Set<OnDemandFillerSource>();
+
+    public DbSet<OnDemandProgress> OnDemandProgress => Set<OnDemandProgress>();
+
     public DbSet<LogoSet> LogoSets => Set<LogoSet>();
 
     public DbSet<LogoSetEntry> LogoSetEntries => Set<LogoSetEntry>();
@@ -75,6 +83,29 @@ public class SpectralTvDbContext : DbContext
         {
             entity.HasIndex(e => new { e.ChannelId, e.SortOrder });
             entity.HasOne<Channel>().WithMany().HasForeignKey(e => e.ChannelId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OnDemandChannel>(entity =>
+        {
+            entity.HasIndex(e => e.Name);
+        });
+
+        modelBuilder.Entity<OnDemandSource>(entity =>
+        {
+            entity.HasIndex(e => new { e.ChannelId, e.SortOrder });
+            entity.HasOne<OnDemandChannel>().WithMany().HasForeignKey(e => e.ChannelId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OnDemandFillerSource>(entity =>
+        {
+            entity.HasIndex(e => new { e.ChannelId, e.SortOrder });
+            entity.HasOne<OnDemandChannel>().WithMany().HasForeignKey(e => e.ChannelId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OnDemandProgress>(entity =>
+        {
+            entity.HasIndex(e => new { e.ChannelId, e.ProgressKey }).IsUnique();
+            entity.HasOne<OnDemandChannel>().WithMany().HasForeignKey(e => e.ChannelId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Lineup>(entity =>
