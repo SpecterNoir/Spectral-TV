@@ -26,6 +26,8 @@ public class SpectralTvDbContext : DbContext
 
     public DbSet<OnDemandProgress> OnDemandProgress => Set<OnDemandProgress>();
 
+    public DbSet<OnDemandPlaylistLink> OnDemandPlaylistLinks => Set<OnDemandPlaylistLink>();
+
     public DbSet<LogoSet> LogoSets => Set<LogoSet>();
 
     public DbSet<LogoSetEntry> LogoSetEntries => Set<LogoSetEntry>();
@@ -105,6 +107,13 @@ public class SpectralTvDbContext : DbContext
         modelBuilder.Entity<OnDemandProgress>(entity =>
         {
             entity.HasIndex(e => new { e.ChannelId, e.ProgressKey }).IsUnique();
+            entity.HasOne<OnDemandChannel>().WithMany().HasForeignKey(e => e.ChannelId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OnDemandPlaylistLink>(entity =>
+        {
+            entity.HasIndex(e => new { e.ChannelId, e.UserId }).IsUnique();
+            entity.HasIndex(e => e.JellyfinPlaylistId).IsUnique();
             entity.HasOne<OnDemandChannel>().WithMany().HasForeignKey(e => e.ChannelId).OnDelete(DeleteBehavior.Cascade);
         });
 
