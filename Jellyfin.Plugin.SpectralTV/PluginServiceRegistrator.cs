@@ -43,6 +43,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<PlayoutBuilderService>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<PlayoutBuilderService>());
         serviceCollection.AddHostedService<DatabaseInitializer>();
+        serviceCollection.AddHostedService<OnDemandPlaybackObserver>();
     }
 
     private static void ConfigureJsonOptions(IServiceCollection serviceCollection)
