@@ -102,12 +102,26 @@ public class WeightedProgrammingService
                 .ToListAsync(cancellationToken)
             : new List<ChannelFillerSource>();
 
+        var anchor = await _channelService.GetAnchorAsync<PlayoutAnchorState>(channel.Id, cancellationToken)
+            ?? new PlayoutAnchorState();
+
         if (mode == PlayoutBuildMode.ReplaceWindow)
         {
             var existing = await _db.PlayoutItems
                 .Where(p => p.ChannelId == channel.Id && p.Finish > startUtc && p.Start < endUtc)
+                .OrderBy(p => p.Start)
                 .ToListAsync(cancellationToken);
+
+            RestoreSequentialCursorsFromExistingWindow(sources, existing, anchor);
+            anchor.RecentFillerSourceIds.Clear();
             _db.PlayoutItems.RemoveRange(existing);
+
+            // PlayoutHistory in recovered FinTV represents generated airings as well as past airings.
+            // Remove entries for the window we are replacing so manual rebuilds do not create duplicates.
+            var futureHistory = await _db.PlayoutHistory
+                .Where(h => h.ChannelId == channel.Id && h.AiredAt >= startUtc && h.AiredAt < endUtc)
+                .ToListAsync(cancellationToken);
+            _db.PlayoutHistory.RemoveRange(futureHistory);
         }
 
         var cursor = startUtc;
@@ -122,9 +136,6 @@ public class WeightedProgrammingService
                 cursor = latestFinish.Value;
             }
         }
-
-        var anchor = await _channelService.GetAnchorAsync<PlayoutAnchorState>(channel.Id, cancellationToken)
-            ?? new PlayoutAnchorState();
 
         var airtimeSeconds = sources.ToDictionary(s => s.Id, _ => 0d);
         var fairnessStart = cursor.AddHours(-24);
@@ -204,6 +215,45 @@ public class WeightedProgrammingService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
+    private void RestoreSequentialCursorsFromExistingWindow(
+        IReadOnlyList<ChannelProgramSource> sources,
+        IReadOnlyList<PlayoutItem> existing,
+        PlayoutAnchorState anchor)
+    {
+        foreach (var source in sources)
+        {
+            if (source.PlaybackMode != ProgramPlaybackMode.Sequential)
+            {
+                continue;
+            }
+
+            var sourceItem = _libraryManager.GetItemById(source.JellyfinItemId);
+            if (sourceItem is not Series && sourceItem is not Season)
+            {
+                continue;
+            }
+
+            var episodes = GetEpisodes(sourceItem);
+            if (episodes.Count == 0)
+            {
+                anchor.ProgramSourceCursor[source.Id] = 0;
+                continue;
+            }
+
+            var firstExisting = existing
+                .FirstOrDefault(p => p.ProgramSourceId == source.Id && p.JellyfinItemId.HasValue);
+            if (firstExisting?.JellyfinItemId is Guid firstId)
+            {
+                var index = episodes.FindIndex(e => e.Id == firstId);
+                anchor.ProgramSourceCursor[source.Id] = index >= 0 ? index : 0;
+            }
+            else
+            {
+                anchor.ProgramSourceCursor[source.Id] = 0;
+            }
+        }
+    }
+
     private ChannelProgramSource PickFairestSource(
         Channel channel,
         IReadOnlyList<ChannelProgramSource> sources,
@@ -239,20 +289,7 @@ public class WeightedProgrammingService
 
         if (item is Series || item is Season)
         {
-            var episodes = _libraryManager.GetItemsResult(new InternalItemsQuery
-            {
-                ParentId = item.Id,
-                Recursive = true,
-                IsVirtualItem = false,
-                IncludeItemTypes = new[] { BaseItemKind.Episode },
-                OrderBy = new[]
-                {
-                    (ItemSortBy.ParentIndexNumber, Jellyfin.Database.Implementations.Enums.SortOrder.Ascending),
-                    (ItemSortBy.IndexNumber, Jellyfin.Database.Implementations.Enums.SortOrder.Ascending),
-                    (ItemSortBy.SortName, Jellyfin.Database.Implementations.Enums.SortOrder.Ascending)
-                }
-            }).Items.OfType<Episode>().ToList();
-
+            var episodes = GetEpisodes(item);
             if (episodes.Count == 0)
             {
                 return null;
@@ -280,6 +317,23 @@ public class WeightedProgrammingService
         }
 
         return MapProgramItem(item);
+    }
+
+    private List<Episode> GetEpisodes(BaseItem parent)
+    {
+        return _libraryManager.GetItemsResult(new InternalItemsQuery
+        {
+            ParentId = parent.Id,
+            Recursive = true,
+            IsVirtualItem = false,
+            IncludeItemTypes = new[] { BaseItemKind.Episode },
+            OrderBy = new[]
+            {
+                (ItemSortBy.ParentIndexNumber, Jellyfin.Database.Implementations.Enums.SortOrder.Ascending),
+                (ItemSortBy.IndexNumber, Jellyfin.Database.Implementations.Enums.SortOrder.Ascending),
+                (ItemSortBy.SortName, Jellyfin.Database.Implementations.Enums.SortOrder.Ascending)
+            }
+        }).Items.OfType<Episode>().ToList();
     }
 
     private ResolvedProgramItem MapProgramItem(BaseItem item)
