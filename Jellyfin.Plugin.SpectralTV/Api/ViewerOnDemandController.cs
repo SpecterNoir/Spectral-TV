@@ -155,7 +155,12 @@ public class ViewerOnDemandController : ControllerBase
             var link = await _playlists.GetLinkAsync(channelId, userId, cancellationToken);
             if (link is not null)
             {
-                await _playlists.SyncAsync(channelId, userId, link.QueueProgramCount, cancellationToken);
+                await _playlists.SyncAsync(
+                    channelId,
+                    userId,
+                    link.QueueProgramCount,
+                    cancellationToken,
+                    result);
             }
 
             return Ok(result);
