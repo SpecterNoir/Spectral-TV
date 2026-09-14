@@ -64,13 +64,16 @@ public class EpgService
             root.Add(channelElement);
         }
 
-        var items = await _db.PlayoutItems
-            .Where(p =>
-                p.Finish > start
-                && p.Start < end
-                && (p.GuideGroup == null || p.GuideGroup != "commercial"))
+        var rawItems = await _db.PlayoutItems
+            .Where(p => p.Finish > start && p.Start < end)
+            .OrderBy(p => p.ChannelId)
+            .ThenBy(p => p.Start)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
+
+        // Promos, bumpers, station IDs, and commercials are part of the TV presentation rather than
+        // standalone guide programmes. Fold contiguous filler into the preceding program's guide window.
+        var items = BuildGuideItems(rawItems);
 
         var metadataByItemId = _guideMetadata.ResolveBatch(items.Select(i => i.JellyfinItemId));
         var channelsById = channels.ToDictionary(c => c.Id);
@@ -99,6 +102,43 @@ public class EpgService
         }
 
         return new XDocument(new XDeclaration("1.0", "UTF-8", null), root);
+    }
+
+    private static List<PlayoutItem> BuildGuideItems(IReadOnlyList<PlayoutItem> rawItems)
+    {
+        var result = new List<PlayoutItem>();
+        foreach (var group in rawItems.GroupBy(i => i.ChannelId))
+        {
+            var ordered = group.OrderBy(i => i.Start).ThenBy(i => i.Finish).ToList();
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                var item = ordered[i];
+                if (item.FillerKind != FillerKind.None)
+                {
+                    continue;
+                }
+
+                var guideFinish = item.Finish;
+                var j = i + 1;
+                while (j < ordered.Count
+                    && ordered[j].FillerKind != FillerKind.None
+                    && ordered[j].Start <= guideFinish.AddSeconds(1))
+                {
+                    if (ordered[j].Finish > guideFinish)
+                    {
+                        guideFinish = ordered[j].Finish;
+                    }
+
+                    j++;
+                }
+
+                // AsNoTracking entities are safe to adjust for the generated guide only.
+                item.Finish = guideFinish;
+                result.Add(item);
+            }
+        }
+
+        return result.OrderBy(i => i.ChannelId).ThenBy(i => i.Start).ToList();
     }
 
     private static XElement BuildProgrammeElement(PlayoutItem item, GuideProgramMetadata? metadata, string baseUrl)
