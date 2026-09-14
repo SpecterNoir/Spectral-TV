@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Fail CI when Spectral TV admin pages regress into dead controls or legacy UI."""
+"""Fail CI when Spectral TV admin pages regress into dead controls, invalid JavaScript, or legacy UI."""
 
 from __future__ import annotations
 
 from html.parser import HTMLParser
 from pathlib import Path
 import re
+import shutil
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,6 +76,24 @@ def endpoint_families(javascript: str) -> set[str]:
     return set(re.findall(r"request\((?:`|['\"])/?([a-z-]+)", javascript))
 
 
+def check_javascript_syntax(label: str, javascript: str, errors: list[str]) -> None:
+    node = shutil.which("node")
+    if node is None:
+        errors.append(f"{label}: Node.js is required to validate admin JavaScript syntax")
+        return
+
+    result = subprocess.run(
+        [node, "--input-type=module", "--check"],
+        input=javascript,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        errors.append(f"{label}: JavaScript syntax check failed: {detail}")
+
+
 def main() -> int:
     html = HTML_PATH.read_text(encoding="utf-8")
     javascript = JS_PATH.read_text(encoding="utf-8")
@@ -83,6 +103,10 @@ def main() -> int:
     connect_javascript = CONNECT_JS_PATH.read_text(encoding="utf-8")
     plugin = PLUGIN_PATH.read_text(encoding="utf-8")
     errors: list[str] = []
+
+    check_javascript_syntax("main admin", javascript, errors)
+    check_javascript_syntax("Channel Studio", studio_javascript, errors)
+    check_javascript_syntax("Live TV connect", connect_javascript, errors)
 
     html_ids, referenced_ids, button_count = audit_page(
         "main admin",
@@ -175,6 +199,7 @@ def main() -> int:
         return 1
 
     print("Spectral TV admin UI validation passed.")
+    print("  JavaScript syntax: valid")
     print(f"  Main HTML ids: {len(html_ids)}")
     print(f"  Main buttons audited: {button_count}")
     print(f"  Main JavaScript-bound ids: {len(referenced_ids)}")
