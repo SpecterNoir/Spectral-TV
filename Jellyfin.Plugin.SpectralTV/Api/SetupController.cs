@@ -18,6 +18,8 @@ public class SetupController : ControllerBase
     private const string SpectralTunerFriendlyName = "Spectral TV";
     private const string M3uTunerType = "m3u";
     private const string XmlTvProviderType = "xmltv";
+    private const string SpectralM3uSuffix = "/SpectralTV/iptv/channels.m3u";
+    private const string SpectralXmlTvSuffix = "/SpectralTV/iptv/epg.xml";
 
     private readonly IServerApplicationHost _appHost;
     private readonly IServerConfigurationManager _configurationManager;
@@ -218,23 +220,13 @@ public class SetupController : ControllerBase
         if (!string.IsNullOrWhiteSpace(savedId))
         {
             var saved = tuners.FirstOrDefault(t => string.Equals(t.Id, savedId, StringComparison.OrdinalIgnoreCase));
-            if (saved is not null)
+            if (saved is not null && IsSpectralTunerCandidate(saved, expectedUrl))
             {
                 return saved;
             }
         }
 
-        var byUrl = tuners.FirstOrDefault(t =>
-            string.Equals(t.Type, M3uTunerType, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(NormalizeUrl(t.Url), NormalizeUrl(expectedUrl), StringComparison.OrdinalIgnoreCase));
-        if (byUrl is not null)
-        {
-            return byUrl;
-        }
-
-        return tuners.FirstOrDefault(t =>
-            string.Equals(t.Type, M3uTunerType, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(t.FriendlyName, SpectralTunerFriendlyName, StringComparison.OrdinalIgnoreCase));
+        return tuners.FirstOrDefault(t => IsSpectralTunerCandidate(t, expectedUrl));
     }
 
     private ListingsProviderInfo? FindSpectralListingsProvider(LiveTvOptions liveTv, string expectedUrl)
@@ -244,23 +236,39 @@ public class SetupController : ControllerBase
         if (!string.IsNullOrWhiteSpace(savedId))
         {
             var saved = providers.FirstOrDefault(p => string.Equals(p.Id, savedId, StringComparison.OrdinalIgnoreCase));
-            if (saved is not null)
+            if (saved is not null && IsSpectralListingsCandidate(saved, expectedUrl))
             {
                 return saved;
             }
         }
 
-        var byUrl = providers.FirstOrDefault(p =>
-            string.Equals(p.Type, XmlTvProviderType, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(NormalizeUrl(p.Path), NormalizeUrl(expectedUrl), StringComparison.OrdinalIgnoreCase));
-        if (byUrl is not null)
+        return providers.FirstOrDefault(p => IsSpectralListingsCandidate(p, expectedUrl));
+    }
+
+    private static bool IsSpectralTunerCandidate(TunerHostInfo tuner, string expectedUrl)
+    {
+        if (!string.Equals(tuner.Type, M3uTunerType, StringComparison.OrdinalIgnoreCase))
         {
-            return byUrl;
+            return false;
         }
 
-        return providers.FirstOrDefault(p =>
-            string.Equals(p.Type, XmlTvProviderType, StringComparison.OrdinalIgnoreCase)
-            && NormalizeUrl(p.Path).EndsWith("/SpectralTV/iptv/epg.xml", StringComparison.OrdinalIgnoreCase));
+        var url = NormalizeUrl(tuner.Url);
+        return string.Equals(url, NormalizeUrl(expectedUrl), StringComparison.OrdinalIgnoreCase)
+            || url.EndsWith(SpectralM3uSuffix, StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(tuner.FriendlyName, SpectralTunerFriendlyName, StringComparison.OrdinalIgnoreCase)
+                && url.Contains("/SpectralTV/", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsSpectralListingsCandidate(ListingsProviderInfo provider, string expectedUrl)
+    {
+        if (!string.Equals(provider.Type, XmlTvProviderType, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var path = NormalizeUrl(provider.Path);
+        return string.Equals(path, NormalizeUrl(expectedUrl), StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(SpectralXmlTvSuffix, StringComparison.OrdinalIgnoreCase);
     }
 
     private object BuildUrlResponse()
@@ -279,8 +287,8 @@ public class SetupController : ControllerBase
         var baseUrl = EpgService.GetPublicBaseUrl(Request, _appHost).TrimEnd('/');
         return (
             baseUrl,
-            $"{baseUrl}/SpectralTV/iptv/channels.m3u",
-            $"{baseUrl}/SpectralTV/iptv/epg.xml");
+            $"{baseUrl}{SpectralM3uSuffix}",
+            $"{baseUrl}{SpectralXmlTvSuffix}");
     }
 
     private static string NormalizeUrl(string? value)
