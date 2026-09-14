@@ -70,6 +70,27 @@ if grep -Eiq 'BadImageFormatException|Disabling plugin.*Spectral|Spectral TV.*Di
   exit 1
 fi
 
+# Activate the anonymous setup-URL action so CI verifies that Jellyfin can construct the
+# setup controller with its native ITunerHostManager/IListingsManager dependencies. This
+# catches DI/API compatibility problems before a NAS administrator can press Connect.
+setup_json=$(curl -fsS --max-time 5 http://127.0.0.1:18096/SpectralTV/api/setup/urls)
+if [[ "$setup_json" != *"/SpectralTV/iptv/channels.m3u"* || "$setup_json" != *"/SpectralTV/iptv/epg.xml"* ]]; then
+  echo "Spectral TV setup controller did not return the expected native Live TV URLs." >&2
+  echo "$setup_json" >&2
+  docker logs "$container" >&2 || true
+  exit 1
+fi
+
+# The mutation/status actions require an elevated Jellyfin session. An unauthenticated
+# request must not be able to inspect or change the server's Live TV configuration.
+status_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
+  http://127.0.0.1:18096/SpectralTV/api/setup/livetv-status || true)
+if [[ "$status_code" != "401" && "$status_code" != "403" ]]; then
+  echo "Spectral TV Live TV status endpoint was not protected by Jellyfin admin authorization (HTTP $status_code)." >&2
+  docker logs "$container" >&2 || true
+  exit 1
+fi
+
 # Keep the host alive briefly after it first becomes reachable so hosted-service startup
 # failures have time to surface. A plugin that kills Jellyfin seconds after boot must fail CI.
 sleep 15
