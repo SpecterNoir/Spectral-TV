@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail CI when the Spectral TV admin page regresses into dead controls or legacy UI."""
+"""Fail CI when Spectral TV admin pages regress into dead controls or legacy UI."""
 
 from __future__ import annotations
 
@@ -9,8 +9,11 @@ import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
-HTML_PATH = ROOT / "Jellyfin.Plugin.SpectralTV" / "Configuration" / "configPage.html"
-JS_PATH = ROOT / "Jellyfin.Plugin.SpectralTV" / "Configuration" / "admin.js"
+CONFIG = ROOT / "Jellyfin.Plugin.SpectralTV" / "Configuration"
+HTML_PATH = CONFIG / "configPage.html"
+JS_PATH = CONFIG / "admin.js"
+STUDIO_HTML_PATH = CONFIG / "channelStudioPage.html"
+STUDIO_JS_PATH = CONFIG / "channelStudio.js"
 PLUGIN_PATH = ROOT / "Jellyfin.Plugin.SpectralTV" / "Plugin.cs"
 API_PATH = ROOT / "Jellyfin.Plugin.SpectralTV" / "Api"
 
@@ -29,32 +32,68 @@ class AuditParser(HTMLParser):
             self.buttons.append(values)
 
 
-def main() -> int:
-    html = HTML_PATH.read_text(encoding="utf-8")
-    javascript = JS_PATH.read_text(encoding="utf-8")
-    plugin = PLUGIN_PATH.read_text(encoding="utf-8")
+def audit_page(
+    label: str,
+    html: str,
+    javascript: str,
+    errors: list[str],
+    allowed_delegated_keys: tuple[str, ...],
+) -> tuple[set[str], set[str], int]:
     parser = AuditParser()
     parser.feed(html)
-    errors: list[str] = []
 
     duplicates = sorted({item for item in parser.ids if parser.ids.count(item) > 1})
     if duplicates:
-        errors.append("duplicate HTML ids: " + ", ".join(duplicates))
+        errors.append(f"{label}: duplicate HTML ids: " + ", ".join(duplicates))
 
     html_ids = set(parser.ids)
     referenced_ids = set(re.findall(r"byId\(['\"]([^'\"]+)['\"]\)", javascript))
     missing_ids = sorted(referenced_ids - html_ids)
     if missing_ids:
-        errors.append("JavaScript references missing HTML ids: " + ", ".join(missing_ids))
+        errors.append(f"{label}: JavaScript references missing HTML ids: " + ", ".join(missing_ids))
 
     for index, button in enumerate(parser.buttons, start=1):
         if not button.get("type"):
-            errors.append(f"button #{index} has no explicit type")
+            errors.append(f"{label}: button #{index} has no explicit type")
         button_id = button.get("id")
         if button_id and button_id not in referenced_ids:
-            errors.append(f"button #{button_id} has no JavaScript binding")
-        if not button_id and not any(key in button for key in ("data-step", "data-copy")) and button.get("type") != "submit":
-            errors.append(f"button #{index} has no id, submit behavior, or delegated action")
+            errors.append(f"{label}: button #{button_id} has no JavaScript binding")
+        if (
+            not button_id
+            and not any(key in button for key in allowed_delegated_keys)
+            and button.get("type") != "submit"
+        ):
+            errors.append(f"{label}: button #{index} has no id, submit behavior, or delegated action")
+
+    return html_ids, referenced_ids, len(parser.buttons)
+
+
+def endpoint_families(javascript: str) -> set[str]:
+    return set(re.findall(r"request\((?:`|['\"])/?([a-z-]+)", javascript))
+
+
+def main() -> int:
+    html = HTML_PATH.read_text(encoding="utf-8")
+    javascript = JS_PATH.read_text(encoding="utf-8")
+    studio_html = STUDIO_HTML_PATH.read_text(encoding="utf-8")
+    studio_javascript = STUDIO_JS_PATH.read_text(encoding="utf-8")
+    plugin = PLUGIN_PATH.read_text(encoding="utf-8")
+    errors: list[str] = []
+
+    html_ids, referenced_ids, button_count = audit_page(
+        "main admin",
+        html,
+        javascript,
+        errors,
+        ("data-step", "data-copy"),
+    )
+    studio_ids, studio_referenced_ids, studio_button_count = audit_page(
+        "Channel Studio",
+        studio_html,
+        studio_javascript,
+        errors,
+        ("data-cs-mode", "data-cs-pick", "data-live-remove", "data-od-source-remove", "data-od-filler-remove"),
+    )
 
     forbidden = (
         "Binarygeek119",
@@ -68,25 +107,28 @@ def main() -> int:
         ">EBS<",
     )
     for value in forbidden:
-        if value.lower() in html.lower():
+        if value.lower() in html.lower() or value.lower() in studio_html.lower():
             errors.append(f"retired UI concept is visible: {value}")
 
     required_steps = {"channel", "programming", "breaks", "finish"}
     actual_steps = set(re.findall(r'data-step="([^"]+)"', html))
     actual_panels = set(re.findall(r'data-panel="([^"]+)"', html))
     if actual_steps != required_steps or actual_panels != required_steps:
-        errors.append(f"workflow mismatch: steps={sorted(actual_steps)} panels={sorted(actual_panels)}")
+        errors.append(f"main admin workflow mismatch: steps={sorted(actual_steps)} panels={sorted(actual_panels)}")
 
-    endpoint_families = set(
-        re.findall(r"request\((?:`|['\"])/?([a-z-]+)", javascript)
-    )
+    studio_modes = set(re.findall(r'data-cs-mode="([^"]+)"', studio_html))
+    if studio_modes != {"live", "ondemand"}:
+        errors.append(f"Channel Studio mode mismatch: modes={sorted(studio_modes)}")
+
     controller_routes = set()
     for controller in API_PATH.glob("*.cs"):
         controller_routes.update(
             route.lower()
             for route in re.findall(r'\[Route\("SpectralTV/api/([^"/{]+)', controller.read_text(encoding="utf-8"))
         )
-    missing_routes = sorted(endpoint_families - controller_routes)
+
+    all_endpoint_families = endpoint_families(javascript) | endpoint_families(studio_javascript)
+    missing_routes = sorted(all_endpoint_families - controller_routes)
     if missing_routes:
         errors.append("admin calls API families without controllers: " + ", ".join(missing_routes))
 
@@ -101,6 +143,8 @@ def main() -> int:
 
     if plugin.count("EnableInMainMenu = true") != 1:
         errors.append("plugin must expose exactly one dashboard entry")
+    if "channelStudioPage.html" not in plugin or "SpectralTV_channelStudio.js" not in plugin:
+        errors.append("Channel Studio resources are not registered by the plugin")
 
     if errors:
         print("Spectral TV admin UI validation FAILED:")
@@ -109,10 +153,13 @@ def main() -> int:
         return 1
 
     print("Spectral TV admin UI validation passed.")
-    print(f"  HTML ids: {len(html_ids)}")
-    print(f"  Buttons audited: {len(parser.buttons)}")
-    print(f"  JavaScript-bound ids: {len(referenced_ids)}")
-    print(f"  API families checked: {len(endpoint_families)}")
+    print(f"  Main HTML ids: {len(html_ids)}")
+    print(f"  Main buttons audited: {button_count}")
+    print(f"  Main JavaScript-bound ids: {len(referenced_ids)}")
+    print(f"  Studio HTML ids: {len(studio_ids)}")
+    print(f"  Studio buttons audited: {studio_button_count}")
+    print(f"  Studio JavaScript-bound ids: {len(studio_referenced_ids)}")
+    print(f"  API families checked: {len(all_endpoint_families)}")
     print("  Retired UI concepts: none")
     return 0
 

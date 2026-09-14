@@ -4,20 +4,21 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.SpectralTV.Data;
 
 /// <summary>
-/// Creates the additive schema used by weighted channels. Kept separate from the recovered SpectralTV
-/// migrator so existing installations can adopt the feature without rewriting legacy migrations.
+/// Creates the additive schema used by automatic live programming. Kept separate from the recovered
+/// SpectralTV migrator so existing installations can adopt the feature without rewriting legacy migrations.
 /// </summary>
 internal static class WeightedProgrammingSchemaMigrator
 {
     public static async Task MigrateAsync(SpectralTvDbContext db, ILogger logger, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Ensuring weighted programming schema");
+        logger.LogInformation("Ensuring automatic programming schema");
 
         await db.Database.ExecuteSqlRawAsync(
             """
             CREATE TABLE IF NOT EXISTS "ChannelProgrammingSettings" (
                 "ChannelId" TEXT NOT NULL PRIMARY KEY,
                 "Enabled" INTEGER NOT NULL DEFAULT 0,
+                "SelectionMode" INTEGER NOT NULL DEFAULT 1,
                 "FillerEnabled" INTEGER NOT NULL DEFAULT 1,
                 "FillerChancePercent" INTEGER NOT NULL DEFAULT 100,
                 "MinFillerItems" INTEGER NOT NULL DEFAULT 1,
@@ -28,6 +29,8 @@ internal static class WeightedProgrammingSchemaMigrator
             );
             """,
             cancellationToken);
+
+        await AddColumnIfMissingAsync(db, "ChannelProgrammingSettings", "SelectionMode", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
 
         await db.Database.ExecuteSqlRawAsync(
             """

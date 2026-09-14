@@ -10,8 +10,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Jellyfin.Plugin.SpectralTV.Services;
 
 /// <summary>
-/// Builds continuous virtual-TV playout from weighted program sources and a separate filler pool.
-/// Program weights are balanced by actual airtime, not by a naive per-pick random percentage.
+/// Builds continuous virtual-TV playout from automatic program sources and a separate filler pool.
+/// Source selection can be balanced, weighted by target airtime, or random; episode order is configured
+/// independently for each source.
 /// </summary>
 public class WeightedProgrammingService
 {
@@ -58,6 +59,9 @@ public class WeightedProgrammingService
         }
 
         settings.Enabled = requested.Enabled;
+        settings.SelectionMode = Enum.IsDefined(requested.SelectionMode)
+            ? requested.SelectionMode
+            : LiveSelectionMode.Weighted;
         settings.FillerEnabled = requested.FillerEnabled;
         settings.FillerChancePercent = Math.Clamp(requested.FillerChancePercent, 0, 100);
         settings.MinFillerItems = Math.Clamp(requested.MinFillerItems, 0, 10);
@@ -166,7 +170,7 @@ public class WeightedProgrammingService
                 break;
             }
 
-            var source = PickFairestSource(channel, available, airtimeSeconds, cursor, sequence);
+            var source = PickSource(channel, settings, available, airtimeSeconds, cursor, sequence);
             var resolved = ResolveProgramItem(channel, source, anchor, cursor, sequence);
             if (resolved is null)
             {
@@ -254,24 +258,33 @@ public class WeightedProgrammingService
         }
     }
 
-    private ChannelProgramSource PickFairestSource(
+    private static ChannelProgramSource PickSource(
         Channel channel,
+        ChannelProgrammingSettings settings,
         IReadOnlyList<ChannelProgramSource> sources,
         IReadOnlyDictionary<Guid, double> airtimeSeconds,
         DateTime cursor,
         int sequence)
     {
-        var minNormalized = sources.Min(s => airtimeSeconds.GetValueOrDefault(s.Id) / Math.Max(0.001, s.TargetAirtimePercent));
-        var tied = sources
-            .Where(s => Math.Abs((airtimeSeconds.GetValueOrDefault(s.Id) / Math.Max(0.001, s.TargetAirtimePercent)) - minNormalized) < 0.0001)
-            .ToList();
-        if (tied.Count == 1)
+        var rng = CreateDeterministicRandom(channel, cursor, sequence, 17);
+        if (settings.SelectionMode == LiveSelectionMode.Random)
         {
-            return tied[0];
+            return sources[rng.Next(sources.Count)];
         }
 
-        var rng = CreateDeterministicRandom(channel, cursor, sequence, 17);
-        return tied[rng.Next(tied.Count)];
+        double Score(ChannelProgramSource source)
+        {
+            var divisor = settings.SelectionMode == LiveSelectionMode.Balanced
+                ? 1d
+                : Math.Max(0.001, source.TargetAirtimePercent);
+            return airtimeSeconds.GetValueOrDefault(source.Id) / divisor;
+        }
+
+        var minNormalized = sources.Min(Score);
+        var tied = sources
+            .Where(s => Math.Abs(Score(s) - minNormalized) < 0.0001)
+            .ToList();
+        return tied.Count == 1 ? tied[0] : tied[rng.Next(tied.Count)];
     }
 
     private ResolvedProgramItem? ResolveProgramItem(

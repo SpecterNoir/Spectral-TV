@@ -31,6 +31,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
 
         serviceCollection.AddScoped<ChannelService>();
         serviceCollection.AddScoped<WeightedProgrammingService>();
+        serviceCollection.AddScoped<OnDemandSequenceService>();
+        serviceCollection.AddScoped<OnDemandPlaylistService>();
         serviceCollection.AddScoped<LineupGeneratorService>();
         serviceCollection.AddScoped<EpgService>();
         serviceCollection.AddScoped<GuideMetadataService>();
@@ -41,6 +43,8 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<PlayoutBuilderService>();
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<PlayoutBuilderService>());
         serviceCollection.AddHostedService<DatabaseInitializer>();
+        serviceCollection.AddHostedService<OnDemandPlaybackObserver>();
+        serviceCollection.AddHostedService<OnDemandPlaylistMaterializer>();
     }
 
     private static void ConfigureJsonOptions(IServiceCollection serviceCollection)
