@@ -22,6 +22,7 @@ public class DatabaseInitializer : IHostedService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<FinTvDbContext>();
         await SchemaMigrator.MigrateAsync(db, _logger, cancellationToken);
+        await WeightedProgrammingSchemaMigrator.MigrateAsync(db, _logger, cancellationToken);
 
         if (!await db.CommercialPresets.AnyAsync(cancellationToken))
         {
