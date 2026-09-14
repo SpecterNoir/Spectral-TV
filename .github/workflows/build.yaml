@@ -80,6 +80,19 @@ jobs:
         with:
           dotnet-target: net10.0
 
+      - name: Strip Windows native SQLite DLLs from beta package
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          artifact="${{ steps.jprm.outputs.artifact }}"
+          artifact_abs=$(realpath "$artifact")
+          tmpdir=$(mktemp -d)
+          unzip -q "$artifact_abs" -d "$tmpdir"
+          find "$tmpdir/runtimes" -type f -path '*/win-*/native/*.dll' -delete 2>/dev/null || true
+          rm -f "$artifact_abs"
+          (cd "$tmpdir" && zip -qr "$artifact_abs" .)
+          rm -rf "$tmpdir"
+
       - name: Upload Artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -148,7 +161,7 @@ jobs:
               "imageUrl": "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png",
               "versions": [{
                   "version": version,
-                  "changelog": "Development beta for Jellyfin 12: weighted programming, separate filler pools, persistent playout, M3U/XMLTV Live TV integration, and Spectral TV dashboard controls.",
+                  "changelog": "Development beta for Jellyfin 12. Fixes Synology/Linux loading by excluding Windows native SQLite DLLs from the plugin package, plus weighted programming, filler pools, persistent playout, M3U/XMLTV Live TV integration, and dashboard controls.",
                   "targetAbi": "12.0.0.0",
                   "sourceUrl": f"https://github.com/{repo}/releases/download/beta/{zipname}",
                   "checksum": checksum,
