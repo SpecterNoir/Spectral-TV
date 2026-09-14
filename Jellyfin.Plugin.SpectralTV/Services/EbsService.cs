@@ -32,7 +32,14 @@ public class EbsService
     {
         var config = Plugin.Instance?.Configuration;
         var displayMode = config?.EbsDisplayMode ?? EbsDisplayMode.SlateImage;
-        var audioMode = config?.EbsAudioMode ?? EbsAudioMode.BackgroundMusic;
+        var audioMode = config?.EbsAudioMode ?? EbsAudioMode.Silence;
+
+        // Background-music playback has been retired from Spectral TV.  Preserve the old enum
+        // value for configuration/database compatibility, but never request music at runtime.
+        if (audioMode == EbsAudioMode.BackgroundMusic)
+        {
+            audioMode = EbsAudioMode.Silence;
+        }
 
         string? slatePath = null;
         if (displayMode == EbsDisplayMode.SlateImage)
@@ -47,22 +54,12 @@ public class EbsService
             }
         }
 
-        string? musicPath = null;
-        if (audioMode == EbsAudioMode.BackgroundMusic)
-        {
-            musicPath = ResolveBackgroundMusicPath();
-            if (string.IsNullOrWhiteSpace(musicPath))
-            {
-                audioMode = EbsAudioMode.Silence;
-            }
-        }
-
         return new EbsPlaybackPlan
         {
             DisplayMode = displayMode,
             AudioMode = audioMode,
             SlateImagePath = slatePath,
-            MusicPath = musicPath,
+            MusicPath = null,
             DurationSeconds = durationSeconds
         };
     }
@@ -161,31 +158,15 @@ public class EbsService
         RemoveCustomSlateFiles(variant);
     }
 
-    public BaseItem? PickBackgroundMusicTrack()
-    {
-        var config = Plugin.Instance?.Configuration;
-        if (config is null)
-        {
-            return null;
-        }
+    /// <summary>
+    /// Legacy compatibility hook. Music playback is disabled and this always returns null.
+    /// </summary>
+    public BaseItem? PickBackgroundMusicTrack() => null;
 
-        IReadOnlyList<BaseItem> tracks = config.EbsBackgroundMusicSource == EbsBackgroundMusicSource.AllMusicLibraries
-            ? _catalog.QueryAllMusicAudio()
-            : _catalog.QueryMusicAudioFromLibrary(config.EbsBackgroundMusicLibraryId, config.EbsBackgroundMusicLibraryName);
-
-        if (tracks.Count == 0)
-        {
-            return null;
-        }
-
-        return tracks[Random.Shared.Next(tracks.Count)];
-    }
-
-    public string? ResolveBackgroundMusicPath()
-    {
-        var track = PickBackgroundMusicTrack();
-        return track is null ? null : _catalog.GetMediaPath(track);
-    }
+    /// <summary>
+    /// Legacy compatibility hook. Music playback is disabled and this always returns null.
+    /// </summary>
+    public string? ResolveBackgroundMusicPath() => null;
 
     private object? DescribeCustomSlate(EbsSlateVariant variant)
     {
