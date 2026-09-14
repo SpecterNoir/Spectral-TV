@@ -20,15 +20,15 @@ trap cleanup EXIT
 mkdir -p "$workdir/config/plugins/Spectral TV_test"
 unzip -q "$artifact" -d "$workdir/config/plugins/Spectral TV_test"
 
-# Run the exact major/minor host targeted by the plugin. The smoke test is intentionally
-# Linux-based because the development target is the user's Synology Jellyfin 12 server.
-docker pull jellyfin/jellyfin:12.0.0 >/dev/null
+# Run the exact major/minor host targeted by the plugin. The official Jellyfin image
+# publishes the stable 12.0 line as jellyfin/jellyfin:12.0.
+docker pull jellyfin/jellyfin:12.0 >/dev/null
 
 docker run -d \
   --name "$container" \
   -p 127.0.0.1:18096:8096 \
   -v "$workdir/config:/config" \
-  jellyfin/jellyfin:12.0.0 >/dev/null
+  jellyfin/jellyfin:12.0 >/dev/null
 
 healthy=0
 for _ in $(seq 1 60); do
