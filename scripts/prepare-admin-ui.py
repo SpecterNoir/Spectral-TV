@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Prepare the embedded Jellyfin admin page for the simplified Spectral TV UI.
 
-The recovered admin page keeps legacy DOM ids for compatibility with its JavaScript, while
-this build step turns the shipped interface into a smaller TV/movie-focused product:
+The recovered admin page keeps a few legacy DOM ids so old cached JavaScript/config data can
+survive an upgrade, while the shipped interface is TV/movie focused:
 - inline the stylesheet so Jellyfin 12 always applies it;
-- remove weather and music channel choices from the visible interface;
-- remove weather navigation and hide legacy weather DOM hooks;
+- remove weather, music, and music-video choices;
+- remove weather-only and browser-capture navigation;
+- remove weather-guide controls from AI;
 - remove background-music controls from off-air settings;
 - group the remaining tools into Build / Enhance / System navigation;
 - add a short orientation panel so the workflow is understandable at a glance.
@@ -17,9 +18,11 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "Jellyfin.Plugin.SpectralTV" / "Configuration"
 PAGE = CONFIG / "configPage.html"
+ADMIN_JS = CONFIG / "admin.js"
 CSS = CONFIG / "admin.css"
 
 page = PAGE.read_text(encoding="utf-8")
+admin_js = ADMIN_JS.read_text(encoding="utf-8")
 css = CSS.read_text(encoding="utf-8")
 
 extra_css = r"""
@@ -149,6 +152,7 @@ extra_css = r"""
 
 /* Legacy compatibility nodes stay in the DOM but are not part of the product UI. */
 #tab-weather,
+#tab-playwright,
 #weather-fields,
 #ebs-music-source-field,
 #ebs-library-field {
@@ -179,8 +183,6 @@ page, replaced = re.subn(
 if replaced != 1:
     raise SystemExit("Could not locate SpectralTV admin stylesheet link")
 
-# Remove obsolete channel types from the visible selector while preserving their historic enum
-# numbers in C# so an upgrade can still deserialize an old database safely.
 for option in (
     '<option value="2">Music Video</option>',
     '<option value="3">Music</option>',
@@ -188,13 +190,29 @@ for option in (
 ):
     page = page.replace(option, "")
 
-# Keep these hidden DOM nodes only because legacy admin.js still queries their ids. No user can
-# create or configure a weather channel from the shipped interface.
+# Keep the channel-weather fields hidden only because old cached admin.js still queries the ids.
 page = page.replace(
     '<div id="weather-fields" class="field-group hidden">',
     '<div id="weather-fields" class="field-group hidden" hidden aria-hidden="true">',
 )
 page = page.replace(' Weather channels update the guide automatically.', '')
+
+# Remove the visible weather-guide AI card. The next card begins with Channel auto-tagging.
+page, weather_ai_removed = re.subn(
+    r'\s*<div class="card section-card">\s*<div class="section-header-row">\s*<h3>Weather guide metadata</h3>.*?(?=\s*<div class="card section-card">\s*<div class="section-header-row">\s*<h3>Channel auto-tagging</h3>)',
+    '\n',
+    page,
+    count=1,
+    flags=re.S,
+)
+if weather_ai_removed != 1:
+    raise SystemExit("Could not remove Weather guide metadata card")
+
+# Remove music wording from the remaining logo instructions.
+page = page.replace(
+    'Channel bugs live under Shows, Movies, and Music Videos Channels.',
+    'Channel bugs live under the Shows and Movies folders.',
+)
 
 # Off-air playback keeps white-noise/silence/beep options. Jellyfin music-library playback is retired.
 page = page.replace(
@@ -210,8 +228,6 @@ page = page.replace(
     '<label class="field hidden" id="ebs-library-field" hidden aria-hidden="true">',
 )
 
-# Replace the flat row of fourteen buttons with three understandable groups. The data-tab values
-# stay unchanged, so the existing controller logic keeps working.
 new_nav = '''<nav class="spectraltv-tabs" role="tablist" aria-label="Spectral TV settings">
                 <div class="spectraltv-tab-group">
                     <span class="spectraltv-tab-group-label">Build</span>
@@ -230,7 +246,6 @@ new_nav = '''<nav class="spectraltv-tabs" role="tablist" aria-label="Spectral TV
                     <div class="spectraltv-tab-group-buttons">
                         <button type="button" class="tab" data-tab="ebs" role="tab">Off-Air</button>
                         <button type="button" class="tab" data-tab="ai" role="tab">AI Assist</button>
-                        <button type="button" class="tab" data-tab="playwright" role="tab">Browser Engine</button>
                     </div>
                 </div>
                 <div class="spectraltv-tab-group">
@@ -247,7 +262,7 @@ new_nav = '''<nav class="spectraltv-tabs" role="tablist" aria-label="Spectral TV
                 <div class="spectraltv-overview-step"><b>1</b><div><strong>Channels</strong><small>Create the station itself: number, name, aspect ratio, and logo.</small></div></div>
                 <div class="spectraltv-overview-step"><b>2</b><div><strong>Programming</strong><small>Use the Programming page to choose shows/movies and airtime weights.</small></div></div>
                 <div class="spectraltv-overview-step"><b>3</b><div><strong>Schedule</strong><small>Use only when you want fixed time blocks or special presentations.</small></div></div>
-                <div class="spectraltv-overview-step"><b>4</b><div><strong>Jellyfin Setup</strong><small>Connect the finished channels to Jellyfin Live TV with M3U/XMLTV.</small></div></div>
+                <div class="spectraltv-overview-step"><b>4</b><div><strong>Jellyfin Setup</strong><small>Connect finished channels to Jellyfin Live TV with M3U/XMLTV.</small></div></div>
             </div>'''
 page, nav_replaced = re.subn(
     r'<nav class="spectraltv-tabs" role="tablist">.*?</nav>',
@@ -259,15 +274,24 @@ page, nav_replaced = re.subn(
 if nav_replaced != 1:
     raise SystemExit("Could not replace Spectral TV tab navigation")
 
+# Clean the one remaining user-facing music reference in a confirmation dialog.
+admin_js = admin_js.replace(
+    'Retag the entire library? This re-evaluates every movie, series, and music video.',
+    'Retag the entire library? This re-evaluates every movie and series.',
+)
+
 # Build-time assertions make UI regressions fail CI instead of silently shipping.
 for forbidden in (
     '<option value="2">Music Video</option>',
     '<option value="3">Music</option>',
     '<option value="4">Weather</option>',
     'data-tab="weather"',
+    'data-tab="playwright"',
+    '<h3>Weather guide metadata</h3>',
 ):
     if forbidden in page:
         raise SystemExit(f"Legacy UI element is still visible: {forbidden}")
 
 PAGE.write_text(page, encoding="utf-8")
+ADMIN_JS.write_text(admin_js, encoding="utf-8")
 print("Prepared simplified Spectral TV admin UI")
