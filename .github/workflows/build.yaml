@@ -41,6 +41,26 @@ jobs:
       - name: Update build.yaml logo artifacts
         run: python3 scripts/update-build-artifacts.py
 
+      - name: Mark development build
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          path = Path('build.yaml')
+          data = yaml.safe_load(path.read_text(encoding='utf-8'))
+          data['version'] = '0.0.3.0'
+          data['owner'] = 'SpecterNoir'
+          data['overview'] = 'Virtual TV channels with weighted programming, promos, bumpers, and IPTV streaming'
+          data['description'] = (
+              'Development build of the recovered FinTV Jellyfin 12 plugin. '
+              'Adds continuous airtime-weighted channels, sequential series playback, '
+              'individual episode programming, and a separate promo/bumper/station-ID pool.'
+          )
+          path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding='utf-8')
+          PY
+
       - name: Build Jellyfin Plugin
         uses: oddstr13/jellyfin-plugin-repository-manager@9497a0a499416cc572ed2e07a391d9f943a37b4d
         id: jprm
