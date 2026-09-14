@@ -5,36 +5,27 @@ using Microsoft.EntityFrameworkCore;
 namespace Jellyfin.Plugin.SpectralTV.Services;
 
 /// <summary>
-/// Applies ready-made Binarygeek119 channel presets.
+/// Applies ready-made TV/movie channel presets.
 /// </summary>
 public class ChannelPresetService
 {
     private readonly SpectralTvDbContext _db;
     private readonly ChannelService _channels;
     private readonly LogoSetService _logoSets;
-    private readonly LineupGeneratorService _lineupGenerator;
     private readonly AiChannelAutoApplyService _aiAutoApply;
 
     public ChannelPresetService(
         SpectralTvDbContext db,
         ChannelService channels,
         LogoSetService logoSets,
-        LineupGeneratorService lineupGenerator,
         AiChannelAutoApplyService aiAutoApply)
     {
         _db = db;
         _channels = channels;
         _logoSets = logoSets;
-        _lineupGenerator = lineupGenerator;
         _aiAutoApply = aiAutoApply;
     }
 
-    /// <summary>
-    /// Lists presets with whether each channel number already exists.
-    /// </summary>
-    /// <param name="numberingMode">Legacy or subchannel numbering to display.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Preset status rows grouped by category.</returns>
     public async Task<IReadOnlyList<ChannelPresetStatus>> GetStatusAsync(
         ChannelPresetNumberingMode numberingMode = ChannelPresetNumberingMode.Subchannels,
         CancellationToken cancellationToken = default)
@@ -66,12 +57,6 @@ public class ChannelPresetService
             .ToList();
     }
 
-    /// <summary>
-    /// Creates missing preset channels.
-    /// </summary>
-    /// <param name="request">Apply options.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Summary of created and skipped channels.</returns>
     public async Task<ApplyChannelPresetsResult> ApplyAsync(ApplyChannelPresetsRequest request, CancellationToken cancellationToken = default)
     {
         var numberingMode = request.NumberingMode;
@@ -132,16 +117,9 @@ public class ChannelPresetService
                 channel.FilterJson = preset.FilterJson;
                 channel.CatalogMode = preset.CatalogMode;
                 channel.Enabled = true;
+                channel.WeatherLocationQuery = null;
                 ApplyLogo(channel, preset, logoSet);
-                ApplyWeatherDefaults(channel, preset);
-                if (channel.ContentType == ChannelContentType.Weather)
-                {
-                    await BuildWeatherPlayoutAsync(channel, cancellationToken);
-                }
-                else
-                {
-                    updatedForAiAutoApply.Add(channel.Id);
-                }
+                updatedForAiAutoApply.Add(channel.Id);
 
                 result.Updated.Add(new ChannelPresetActionResult
                 {
@@ -161,21 +139,13 @@ public class ChannelPresetService
                 Enabled = true,
                 FilterJson = preset.FilterJson,
                 CatalogMode = preset.CatalogMode,
-                PlayoutSeed = CreateSeed(number)
+                PlayoutSeed = CreateSeed(number),
+                WeatherLocationQuery = null
             };
 
             ApplyLogo(newChannel, preset, logoSet);
-            ApplyWeatherDefaults(newChannel, preset);
-
             var created = await _channels.CreateAsync(newChannel, cancellationToken);
-            if (created.ContentType == ChannelContentType.Weather)
-            {
-                await BuildWeatherPlayoutAsync(created, cancellationToken);
-            }
-            else
-            {
-                _aiAutoApply.QueueAutoApplyForChannel(created.Id);
-            }
+            _aiAutoApply.QueueAutoApplyForChannel(created.Id);
 
             existingNumbers.Add(new { Number = created.Number, Id = created.Id });
             result.Created.Add(new ChannelPresetActionResult
@@ -241,95 +211,47 @@ public class ChannelPresetService
             && tag.Equals(libraryTag, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static void ApplyWeatherDefaults(Channel channel, ChannelPresetDefinition preset)
-    {
-        if (!preset.IsWeatherChannel)
-        {
-            return;
-        }
-
-        channel.WeatherLocationQuery ??= WeatherStarChannelService.DefaultWeatherLocationQuery;
-    }
-
-    private async Task BuildWeatherPlayoutAsync(Channel channel, CancellationToken cancellationToken)
-    {
-        var start = DateTime.UtcNow.Date;
-        var end = PlayoutScheduleHelper.GetHorizonEndUtc(start);
-        await _lineupGenerator.BuildPlayoutAsync(channel, start, end, PlayoutBuildMode.ReplaceWindow, cancellationToken);
-    }
-
     private static int CreateSeed(decimal number)
     {
         return Math.Abs(decimal.GetBits(number)[0]) + 42;
     }
 }
 
-/// <summary>
-/// Preset availability row for the admin UI.
-/// </summary>
 public class ChannelPresetStatus
 {
     public string Id { get; set; } = string.Empty;
-
     public decimal Number { get; set; }
-
     public decimal LegacyNumber { get; set; }
-
     public decimal SubchannelNumber { get; set; }
-
     public string Name { get; set; } = string.Empty;
-
     public string Category { get; set; } = string.Empty;
-
     public string Description { get; set; } = string.Empty;
-
     public ChannelContentType ContentType { get; set; }
-
     public string LibraryTag { get; set; } = string.Empty;
-
     public ChannelPresetNumberingMode NumberingMode { get; set; }
-
     public bool Exists { get; set; }
 }
 
-/// <summary>
-/// Apply preset request options.
-/// </summary>
 public class ApplyChannelPresetsRequest
 {
     public IReadOnlyList<string>? PresetIds { get; set; }
-
     public ChannelPresetNumberingMode NumberingMode { get; set; } = ChannelPresetNumberingMode.Subchannels;
-
     public bool SkipExisting { get; set; } = true;
-
     public bool UpdateExisting { get; set; }
 }
 
-/// <summary>
-/// Apply preset operation summary.
-/// </summary>
 public class ApplyChannelPresetsResult
 {
     public List<ChannelPresetActionResult> Created { get; set; } = new();
-
     public List<ChannelPresetActionResult> Updated { get; set; } = new();
-
     public List<ChannelPresetActionResult> Skipped { get; set; } = new();
 }
 
-/// <summary>
-/// Result row for a single preset action.
-/// </summary>
 public class ChannelPresetActionResult
 {
     public string Id { get; set; } = string.Empty;
-
     public decimal Number { get; set; }
-
     public string Name { get; set; } = string.Empty;
-
     public Guid? ChannelId { get; set; }
-
     public string? Reason { get; set; }
 }
