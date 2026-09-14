@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - main
+      - feature/weighted-channels
     paths-ignore:
       - '**/*.md'
   pull_request:
@@ -15,12 +16,17 @@ on:
       - '**/*.md'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
@@ -42,7 +48,7 @@ jobs:
         run: python3 scripts/update-build-artifacts.py
 
       - name: Mark development build
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/feature/weighted-channels'
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -73,3 +79,26 @@ jobs:
           retention-days: 30
           if-no-files-found: error
           path: ${{ steps.jprm.outputs.artifact }}
+
+      - name: Publish rolling beta release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/weighted-channels'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          artifact="${{ steps.jprm.outputs.artifact }}"
+          git tag -f beta "${GITHUB_SHA}"
+          git push origin refs/tags/beta --force
+
+          if gh release view beta >/dev/null 2>&1; then
+            gh release upload beta "$artifact" --clobber
+            gh release edit beta \
+              --title "Jellyfin-TV Latest Beta" \
+              --notes "Latest installable Jellyfin 12 beta built automatically from feature/weighted-channels. This is the runtime-test build for weighted channels and promo/bumper scheduling." \
+              --prerelease
+          else
+            gh release create beta "$artifact" \
+              --title "Jellyfin-TV Latest Beta" \
+              --notes "Latest installable Jellyfin 12 beta built automatically from feature/weighted-channels. This is the runtime-test build for weighted channels and promo/bumper scheduling." \
+              --prerelease
+          fi
