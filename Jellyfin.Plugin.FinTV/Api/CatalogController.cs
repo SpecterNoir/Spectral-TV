@@ -34,13 +34,8 @@ public class CatalogController : ControllerBase
     }
 
     /// <summary>
-    /// Searches Jellyfin library items for lineup slot assignment.
+    /// Searches Jellyfin library items for lineup and weighted-channel assignment.
     /// </summary>
-    /// <param name="q">Search text.</param>
-    /// <param name="contentType">Optional channel content type filter.</param>
-    /// <param name="limit">Maximum results.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Matching library items.</returns>
     [HttpGet("search")]
     public ActionResult<IEnumerable<object>> Search(
         [FromQuery] string q,
@@ -63,7 +58,15 @@ public class CatalogController : ControllerBase
             Limit = Math.Clamp(limit, 1, 50),
             IncludeItemTypes = contentType.HasValue
                 ? GetItemTypes(contentType.Value)
-                : new[] { BaseItemKind.Movie, BaseItemKind.Episode, BaseItemKind.MusicVideo, BaseItemKind.Audio },
+                : new[]
+                {
+                    BaseItemKind.Series,
+                    BaseItemKind.Season,
+                    BaseItemKind.Episode,
+                    BaseItemKind.Movie,
+                    BaseItemKind.MusicVideo,
+                    BaseItemKind.Video
+                },
             OrderBy = new[] { (ItemSortBy.SortName, Jellyfin.Database.Implementations.Enums.SortOrder.Ascending) }
         };
 
@@ -74,9 +77,6 @@ public class CatalogController : ControllerBase
     /// <summary>
     /// Resolves display metadata for Jellyfin item identifiers.
     /// </summary>
-    /// <param name="request">Lookup request.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Resolved item metadata.</returns>
     [HttpPost("lookup")]
     public ActionResult<IEnumerable<object>> Lookup([FromBody] CatalogLookupRequest request, CancellationToken cancellationToken = default)
     {
@@ -103,12 +103,6 @@ public class CatalogController : ControllerBase
     /// <summary>
     /// Browses library items by tag for AI lineup generation.
     /// </summary>
-    /// <param name="tag">Library tag filter.</param>
-    /// <param name="contentType">Optional channel content type.</param>
-    /// <param name="catalogMode">Optional catalog mode override.</param>
-    /// <param name="limit">Maximum results.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Matching library items.</returns>
     [HttpGet("browse")]
     public ActionResult<object> Browse(
         [FromQuery] string? tag,
@@ -158,11 +152,19 @@ public class CatalogController : ControllerBase
     {
         return contentType switch
         {
-            ChannelContentType.TvShow => new[] { BaseItemKind.Episode },
+            ChannelContentType.TvShow => new[] { BaseItemKind.Series, BaseItemKind.Season, BaseItemKind.Episode },
             ChannelContentType.Movie => new[] { BaseItemKind.Movie },
-            ChannelContentType.MusicVideo => new[] { BaseItemKind.MusicVideo },
+            ChannelContentType.MusicVideo => new[] { BaseItemKind.MusicVideo, BaseItemKind.Video },
             ChannelContentType.Music => new[] { BaseItemKind.Audio },
-            _ => new[] { BaseItemKind.Movie, BaseItemKind.Episode, BaseItemKind.MusicVideo, BaseItemKind.Audio }
+            _ => new[]
+            {
+                BaseItemKind.Series,
+                BaseItemKind.Season,
+                BaseItemKind.Episode,
+                BaseItemKind.Movie,
+                BaseItemKind.MusicVideo,
+                BaseItemKind.Video
+            }
         };
     }
 }
