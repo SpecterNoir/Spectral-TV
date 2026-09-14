@@ -2,6 +2,7 @@ using System.Globalization;
 using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.SpectralTV.Data;
 using Jellyfin.Plugin.SpectralTV.Domain;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Playlists;
 using MediaBrowser.Model.Playlists;
 using Microsoft.EntityFrameworkCore;
@@ -19,17 +20,23 @@ public class OnDemandPlaylistService
     private readonly SpectralTvDbContext _db;
     private readonly OnDemandSequenceService _sequence;
     private readonly IPlaylistManager _playlistManager;
+    private readonly IUserManager _userManager;
+    private readonly ILibraryManager _libraryManager;
     private readonly ILogger<OnDemandPlaylistService> _logger;
 
     public OnDemandPlaylistService(
         SpectralTvDbContext db,
         OnDemandSequenceService sequence,
         IPlaylistManager playlistManager,
+        IUserManager userManager,
+        ILibraryManager libraryManager,
         ILogger<OnDemandPlaylistService> logger)
     {
         _db = db;
         _sequence = sequence;
         _playlistManager = playlistManager;
+        _userManager = userManager;
+        _libraryManager = libraryManager;
         _logger = logger;
     }
 
@@ -54,6 +61,8 @@ public class OnDemandPlaylistService
             throw new ArgumentException("A Jellyfin user id is required.", nameof(userId));
         }
 
+        var user = _userManager.GetUserById(userId)
+            ?? throw new InvalidOperationException("The Jellyfin user no longer exists.");
         var channel = await _db.OnDemandChannels
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == channelId, cancellationToken)
@@ -66,8 +75,9 @@ public class OnDemandPlaylistService
         programCount = Math.Clamp(programCount, 4, 100);
         var progressKey = GetUserProgressKey(userId);
 
-        // Persist a real current program, then look ahead non-destructively from that exact state.
-        var current = await _sequence.GetNextAsync(channelId, progressKey, false, cancellationToken);
+        // Persist a real current program. If a recipe references media hidden from this Jellyfin user,
+        // skip it rather than leaving the user's smart channel stuck on an item they cannot open.
+        var current = await GetNextVisibleAsync(channelId, progressKey, user, cancellationToken);
         var preview = await _sequence.PreviewAsync(channelId, programCount, progressKey, cancellationToken);
         var queueIds = MergeQueue(current, preview);
         if (queueIds.Count == 0)
@@ -169,6 +179,39 @@ public class OnDemandPlaylistService
         => await _db.OnDemandPlaylistLinks
             .AsNoTracking()
             .FirstOrDefaultAsync(l => l.ChannelId == channelId && l.UserId == userId, cancellationToken);
+
+    private async Task<OnDemandQueueResult> GetNextVisibleAsync(
+        Guid channelId,
+        string progressKey,
+        Jellyfin.Database.Implementations.Entities.User user,
+        CancellationToken cancellationToken)
+    {
+        var current = await _sequence.GetNextAsync(channelId, progressKey, false, cancellationToken);
+        const int MaxSkips = 200;
+        for (var attempt = 0; attempt < MaxSkips; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (current.Progress.CurrentItemId is not Guid currentId)
+            {
+                throw new InvalidOperationException("The on-demand recipe did not produce a main program.");
+            }
+
+            var item = _libraryManager.GetItemById(currentId);
+            if (item is not null && item.IsVisible(user))
+            {
+                return current;
+            }
+
+            _logger.LogDebug(
+                "Skipping Spectral TV item {ItemId} in channel {ChannelId} because it is not visible to user {UserId}",
+                currentId,
+                channelId,
+                user.Id);
+            current = await _sequence.GetNextAsync(channelId, progressKey, true, cancellationToken);
+        }
+
+        throw new InvalidOperationException("No playable items in this on-demand channel are visible to this Jellyfin user.");
+    }
 
     private static List<Guid> MergeQueue(OnDemandQueueResult current, OnDemandQueueResult preview)
     {
