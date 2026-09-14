@@ -20,7 +20,7 @@ jobs:
           ref: feature/weighted-channels
           fetch-depth: 0
 
-      - name: Rename FinTV branding to Spectral TV
+      - name: Rename project branding
         shell: bash
         run: |
           python3 - <<'PY'
@@ -29,36 +29,31 @@ jobs:
           import re
 
           root = Path('.')
+          workflow_dir = Path('.github/workflows')
           old_guid = 'f4e8a2b1-3c5d-4e6f-9a8b-7c6d5e4f3a2b'
           new_guid = '8a3f6c2d-5b4e-4d9a-a721-3e6f8c1b2d47'
 
-          # Replace every legacy project token in UTF-8 text files. Binary files are skipped.
           for path in list(root.rglob('*')):
-              if not path.is_file() or '.git' in path.parts:
+              if not path.is_file() or '.git' in path.parts or workflow_dir in path.parents:
                   continue
               try:
                   text = path.read_text(encoding='utf-8')
               except (UnicodeDecodeError, OSError):
                   continue
-
               text = text.replace('Jellyfin.Plugin.FinTV', 'Jellyfin.Plugin.SpectralTV')
               text = text.replace('FinTV', 'SpectralTV')
               text = text.replace('FinTv', 'SpectralTv')
               text = text.replace('fintv', 'spectraltv')
               text = text.replace(old_guid, new_guid)
-
-              # Old upstream links should point at this project rather than a renamed non-existent upstream URL.
               text = text.replace('binarygeek119/SpectralTV', 'SpecterNoir/Jellyfin-TV')
               text = text.replace('SpectralTVProject/SpectralTV-Plugin', 'SpecterNoir/Jellyfin-TV')
-
               path.write_text(text, encoding='utf-8')
 
-          # Rename files and directories containing legacy project tokens, bottom-up.
           def rename_token(name: str) -> str:
               return name.replace('FinTV', 'SpectralTV').replace('FinTv', 'SpectralTv').replace('fintv', 'spectraltv')
 
           for current, dirs, files in os.walk('.', topdown=False):
-              if current.startswith('./.git'):
+              if current.startswith('./.git') or current.startswith('./.github/workflows'):
                   continue
               base = Path(current)
               for file_name in files:
@@ -66,20 +61,18 @@ jobs:
                   if new_name != file_name:
                       (base / file_name).rename(base / new_name)
               for dir_name in dirs:
-                  if dir_name == '.git':
+                  if dir_name == '.git' or str(base / dir_name).startswith('.github/workflows'):
                       continue
                   new_name = rename_token(dir_name)
                   if new_name != dir_name:
                       (base / dir_name).rename(base / new_name)
 
-          # Public-facing product name uses a space; internal identifiers use SpectralTV.
           plugin = Path('Jellyfin.Plugin.SpectralTV/Plugin.cs')
           text = plugin.read_text(encoding='utf-8')
           text = text.replace('public override string Name => "SpectralTV";', 'public override string Name => "Spectral TV";')
           text = text.replace('DisplayName = "SpectralTV Programming"', 'DisplayName = "Spectral TV Programming"')
           plugin.write_text(text, encoding='utf-8')
 
-          # Make visible HTML labels use the human-readable name without changing element IDs/routes.
           for html_path in [
               Path('Jellyfin.Plugin.SpectralTV/Configuration/configPage.html'),
               Path('Jellyfin.Plugin.SpectralTV/Configuration/programmingPage.html')
@@ -88,7 +81,6 @@ jobs:
               text = re.sub(r'>([^<]*)SpectralTV([^<]*)<', lambda m: '>' + m.group(1) + 'Spectral TV' + m.group(2) + '<', text)
               html_path.write_text(text, encoding='utf-8')
 
-          # Fresh plugin metadata: no inherited release-history document carrying the former brand.
           Path('manifest.json').write_text('[]\n', encoding='utf-8')
 
           build = Path('build.yaml')
@@ -98,18 +90,13 @@ jobs:
           text = re.sub(r'(?m)^overview:\s*.*$', 'overview: "Always-on virtual TV channels for Jellyfin with weighted programming, promos, bumpers, and IPTV streaming"', text, count=1)
           build.write_text(text, encoding='utf-8')
 
-          # Replace the inherited README with a clean project-facing document.
           Path('README.md').write_text('''# Spectral TV\n\nSpectral TV is a native Jellyfin 12 plugin for building always-on virtual television channels from your Jellyfin library.\n\n## Current development focus\n\n- Weighted programming by actual airtime\n- Whole-series, season, episode, movie, and music-video sources\n- Sequential or random episode progression\n- Separate promo, bumper, commercial, and station-ID pools\n- Shared wall-clock schedules with M3U and XMLTV Live TV integration\n- Tune-in mid-program from normal Jellyfin clients\n- Jellyfin dashboard controls for channel creation, programming, filler, and playout rebuilds\n\n## Status\n\nSpectral TV is under active development for Jellyfin 12 / .NET 10. Development builds are produced automatically through GitHub Actions and should be treated as test builds until runtime validation is complete.\n\n## Project history\n\nSpectral TV began from earlier open-source virtual-TV plugin work by binarygeek119 and contributors and has since been substantially reworked and extended. Original attribution is retained here while the project uses its own name, plugin identity, scheduling model, UI, and release line.\n''', encoding='utf-8')
 
           Path('NOTICE.md').write_text('''# Notice\n\nSpectral TV incorporates and modifies earlier open-source virtual-TV plugin work by binarygeek119 and contributors. The current project has its own branding, plugin identity, feature set, and release line.\n''', encoding='utf-8')
 
-          # Remove this one-time workflow from the resulting tree.
-          Path('.github/workflows/rename-spectral-tv.yaml').unlink(missing_ok=True)
-
-          # Hard check: no legacy FinTV spelling may remain in tracked text or path names.
           leftovers = []
           for path in root.rglob('*'):
-              if '.git' in path.parts:
+              if '.git' in path.parts or workflow_dir in path.parents:
                   continue
               if any(token in str(path) for token in ('FinTV', 'FinTv', 'fintv')):
                   leftovers.append(str(path))
@@ -122,7 +109,7 @@ jobs:
                   if any(token in text for token in ('FinTV', 'FinTv', 'fintv')):
                       leftovers.append(str(path))
           if leftovers:
-              raise SystemExit('Legacy FinTV references remain:\n' + '\n'.join(sorted(set(leftovers))))
+              raise SystemExit('Legacy branding remains:\n' + '\n'.join(sorted(set(leftovers))))
           PY
 
       - name: Commit rebrand
@@ -130,6 +117,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add -A -- ':!.github/workflows'
           git commit -m "Rebrand plugin as Spectral TV"
           git push origin HEAD:feature/weighted-channels
