@@ -31,6 +31,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
 
         serviceCollection.AddScoped<ChannelService>();
         serviceCollection.AddScoped<WeightedProgrammingService>();
+        serviceCollection.AddScoped<OnDemandSequenceService>();
         serviceCollection.AddScoped<LineupGeneratorService>();
         serviceCollection.AddScoped<EpgService>();
         serviceCollection.AddScoped<GuideMetadataService>();
