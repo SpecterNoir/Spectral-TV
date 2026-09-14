@@ -15,6 +15,17 @@ public class PlayoutAnchorState
 
     public Dictionary<Guid, DateTime> LastAired { get; set; } = new();
 
+    /// <summary>
+    /// Per-source cursor used by the weighted programming engine so a series/season resumes
+    /// at the next episode the next time that source wins a scheduling slot.
+    /// </summary>
+    public Dictionary<Guid, int> ProgramSourceCursor { get; set; } = new();
+
+    /// <summary>
+    /// Most recently used filler source IDs, oldest first, for repeat protection.
+    /// </summary>
+    public List<Guid> RecentFillerSourceIds { get; set; } = new();
+
     public string? LastHolidayId { get; set; }
 }
 
