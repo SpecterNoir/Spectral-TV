@@ -37,6 +37,8 @@
     <EmbeddedResource Include="Configuration\configPage.html" />
     <EmbeddedResource Include="Configuration\admin.js" />
     <EmbeddedResource Include="Configuration\admin.css" />
+    <EmbeddedResource Include="Configuration\programmingPage.html" />
+    <EmbeddedResource Include="Configuration\programming.js" />
   </ItemGroup>
 
   <Target Name="FetchBinarygeek119Logos" BeforeTargets="PrepareForBuild" Condition="'$(SkipLogoFetch)' != 'true'">
