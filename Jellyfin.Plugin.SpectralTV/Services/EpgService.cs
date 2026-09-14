@@ -86,7 +86,7 @@ public class EpgService
                 metadataByItemId.TryGetValue(item.JellyfinItemId.Value, out metadata);
             }
 
-            root.Add(BuildProgrammeElement(item, metadata));
+            root.Add(BuildProgrammeElement(item, metadata, baseUrl));
         }
 
         return new XDocument(new XDeclaration("1.0", "UTF-8", null), root);
@@ -129,7 +129,7 @@ public class EpgService
         return result.OrderBy(i => i.ChannelId).ThenBy(i => i.Start).ToList();
     }
 
-    private static XElement BuildProgrammeElement(PlayoutItem item, GuideProgramMetadata? metadata)
+    private static XElement BuildProgrammeElement(PlayoutItem item, GuideProgramMetadata? metadata, string baseUrl)
     {
         var programme = new XElement(
             "programme",
@@ -190,9 +190,12 @@ public class EpgService
                 metadata.OfficialRating));
         }
 
-        if (!string.IsNullOrWhiteSpace(metadata?.IconUrl))
+        var posterUrl = !string.IsNullOrWhiteSpace(metadata?.IconUrl)
+            ? metadata.IconUrl
+            : GuideMetadataService.GetPosterUrl(baseUrl, metadata?.PosterItemId);
+        if (!string.IsNullOrWhiteSpace(posterUrl))
         {
-            programme.Add(new XElement("icon", new XAttribute("src", metadata.IconUrl)));
+            programme.Add(new XElement("icon", new XAttribute("src", posterUrl)));
         }
 
         return programme;
