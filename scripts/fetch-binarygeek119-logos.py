@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download SpectralTV channel logos from the open-channel-logos spectraltv2 branch."""
+"""Download Spectral TV channel logos from the pinned open-channel-logos source revision."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import urllib.request
 from pathlib import Path
 
 REPO = "binarygeek119/open-channel-logos"
-GIT_REF = "spectraltv2"
+GIT_REF = "22b4bbd3e5882d18cdf6b6c66b55c6e386405d49"
 TREE_URL = f"https://api.github.com/repos/{REPO}/git/trees/{GIT_REF}?recursive=1"
 RAW_BASE = f"https://raw.githubusercontent.com/{REPO}/{GIT_REF}/"
 LOGO_PREFIXES = (
