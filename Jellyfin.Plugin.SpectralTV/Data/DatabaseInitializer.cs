@@ -29,6 +29,7 @@ public class DatabaseInitializer : IHostedService
             var db = scope.ServiceProvider.GetRequiredService<SpectralTvDbContext>();
             await SchemaMigrator.MigrateAsync(db, _logger, cancellationToken);
             await WeightedProgrammingSchemaMigrator.MigrateAsync(db, _logger, cancellationToken);
+            await OnDemandSchemaMigrator.MigrateAsync(db, _logger, cancellationToken);
 
             _logger.LogInformation("SpectralTV database initialized");
         }
