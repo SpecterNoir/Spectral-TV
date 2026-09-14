@@ -6,11 +6,13 @@ targetAbi: "12.0.0.0"
 framework: "net10.0"
 owner: "SpecterNoir"
 imageUrl: "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png"
-overview: "Always-on virtual TV channels for Jellyfin"
+overview: "Virtual live and on-demand TV channels for Jellyfin"
 description: >
-  Build always-on Jellyfin Live TV channels from shows, seasons, episodes, and movies.
-  Balance sources by airtime, advance episodes sequentially or randomly, insert optional
-  promos and bumpers, and publish a shared M3U stream with XMLTV guide data.
+  Build automatic Jellyfin Live TV channels and resumable on-demand smart channels from
+  shows, seasons, episodes, and movies. Choose balanced, weighted, random, block, alternating,
+  shuffle, fixed-sequence, or custom-pattern programming; keep each show's episode progress
+  independent; insert optional promos and bumpers; and use ordinary Jellyfin clients through
+  native Live TV and private per-user playlists.
 category: "LiveTV"
 assemblies:
   - "Jellyfin.Plugin.SpectralTV.dll"
@@ -42,7 +44,10 @@ artifacts:
   - "runtimes/linux-musl-arm64/native/libe_sqlite3.so"
   - "runtimes/linux-musl-arm/native/libe_sqlite3.so"
 changelog: |-
-  - Replace the inherited multi-page admin with one guided four-step channel workspace
-  - Remove legacy ready-made channels, manual 48-slot lineups, AI, weather, music, browser sidecars, and third-party commercial sync
-  - Add direct channel logo upload, clearer airtime shares, simplified break controls, build readiness, and one-time Jellyfin setup
-  - Add CI checks that reject dead UI controls and retired feature leakage before packaging
+  - Add Channel Studio for automatic Live TV and resumable on-demand smart channels
+  - Add balanced, weighted, and random live source selection while preserving independent sequential or random episode order
+  - Add alternating, block, balanced-random, weighted-random, random, shuffle-cycle, fixed-sequence, and custom-pattern on-demand programming
+  - Add separate promo, bumper, commercial, and station-ID pools that do not corrupt episode progress
+  - Materialize enabled on-demand channels as private per-user Jellyfin playlists so normal clients can play them without a custom client
+  - Track authenticated per-user progress and safely advance smart playlists only when Jellyfin playback belongs to the linked Spectral TV queue
+  - Preserve Jellyfin user visibility rules, resume positions, Linux/Synology package sanitization, and startup safety checks
