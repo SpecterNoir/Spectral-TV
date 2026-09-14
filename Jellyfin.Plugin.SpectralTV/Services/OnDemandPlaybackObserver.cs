@@ -204,9 +204,14 @@ public sealed class OnDemandPlaybackObserver : IHostedService
                 return;
             }
 
-            await sequence.GetNextAsync(progress.ChannelId, progressKey, completeCurrent: true)
+            var next = await sequence.GetNextAsync(progress.ChannelId, progressKey, completeCurrent: true)
                 .ConfigureAwait(false);
-            await playlistService.SyncAsync(progress.ChannelId, userId, link.QueueProgramCount)
+            await playlistService.SyncAsync(
+                    progress.ChannelId,
+                    userId,
+                    link.QueueProgramCount,
+                    CancellationToken.None,
+                    next)
                 .ConfigureAwait(false);
 
             _logger.LogInformation(
