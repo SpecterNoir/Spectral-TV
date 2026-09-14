@@ -9,12 +9,12 @@
     "imageUrl": "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png",
     "versions": [
       {
-        "version": "0.0.3.61",
+        "version": "0.0.3.82",
         "changelog": "Ground-up Spectral TV overhaul: one guided channel workspace, direct Jellyfin library programming, optional breaks and logos, retired inherited workflows, UI contract validation, and Linux startup smoke testing.",
         "targetAbi": "12.0.0.0",
-        "sourceUrl": "https://github.com/SpecterNoir/Spectral-TV/releases/download/beta/spectral-tv_0.0.3.61.zip",
-        "checksum": "1d5cf9c9099fded80523be2268c0878f",
-        "timestamp": "2026-09-14T12:52:39Z"
+        "sourceUrl": "https://github.com/SpecterNoir/Spectral-TV/releases/download/beta/spectral-tv_0.0.3.82.zip",
+        "checksum": "f25a7fb3e26381e46e1d907d786884a5",
+        "timestamp": "2026-09-14T15:48:59Z"
       }
     ]
   }
