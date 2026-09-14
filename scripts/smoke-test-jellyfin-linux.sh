@@ -93,12 +93,27 @@ if grep -Eiq 'BadImageFormatException|Disabling plugin.*Spectral|Spectral TV.*Di
   fail_with_logs "Spectral TV produced a startup-fatal signature." "$logfile"
 fi
 
-# Capture the ephemeral first user's name while first-time-setup access is still allowed.
+# Jellyfin 12 can answer /System/Info/Public while its first-run database migrations are
+# still running. During that interval /Startup/User deliberately returns HTTP 503. Poll
+# the setup endpoint itself so a normal migration window is never mistaken for a plugin
+# startup failure, while still failing if the container exits or setup never becomes ready.
 startup_user="$workdir/startup-user.json"
-startup_user_code=$(curl -sS -o "$startup_user" -w '%{http_code}' --max-time 5 \
-  "$base_url/Startup/User" || true)
+startup_user_code=""
+for _ in $(seq 1 90); do
+  startup_user_code=$(curl -sS -o "$startup_user" -w '%{http_code}' --max-time 5 \
+    "$base_url/Startup/User" || true)
+  if [[ "$startup_user_code" == "200" ]]; then
+    break
+  fi
+
+  if ! docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null | grep -qx true; then
+    break
+  fi
+
+  sleep 2
+done
 if [[ "$startup_user_code" != "200" ]]; then
-  fail_with_logs "Could not read the ephemeral Jellyfin startup user (HTTP $startup_user_code)." "$startup_user"
+  fail_with_logs "Jellyfin setup did not become ready after startup migrations (last HTTP $startup_user_code)." "$startup_user"
 fi
 startup_username=$(json_field "$startup_user" "Name")
 if [[ -z "$startup_username" ]]; then
