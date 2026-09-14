@@ -12,6 +12,12 @@ public class FinTvDbContext : DbContext
 
     public DbSet<Channel> Channels => Set<Channel>();
 
+    public DbSet<ChannelProgrammingSettings> ChannelProgrammingSettings => Set<ChannelProgrammingSettings>();
+
+    public DbSet<ChannelProgramSource> ChannelProgramSources => Set<ChannelProgramSource>();
+
+    public DbSet<ChannelFillerSource> ChannelFillerSources => Set<ChannelFillerSource>();
+
     public DbSet<LogoSet> LogoSets => Set<LogoSet>();
 
     public DbSet<LogoSetEntry> LogoSetEntries => Set<LogoSetEntry>();
@@ -53,6 +59,24 @@ public class FinTvDbContext : DbContext
             entity.HasOne(e => e.DefaultLineup).WithOne(e => e.Channel!).HasForeignKey<Lineup>(e => e.ChannelId);
         });
 
+        modelBuilder.Entity<ChannelProgrammingSettings>(entity =>
+        {
+            entity.HasKey(e => e.ChannelId);
+            entity.HasOne<Channel>().WithOne().HasForeignKey<ChannelProgrammingSettings>(e => e.ChannelId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ChannelProgramSource>(entity =>
+        {
+            entity.HasIndex(e => new { e.ChannelId, e.SortOrder });
+            entity.HasOne<Channel>().WithMany().HasForeignKey(e => e.ChannelId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ChannelFillerSource>(entity =>
+        {
+            entity.HasIndex(e => new { e.ChannelId, e.SortOrder });
+            entity.HasOne<Channel>().WithMany().HasForeignKey(e => e.ChannelId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<Lineup>(entity =>
         {
             entity.HasMany(e => e.Slots).WithOne(e => e.Lineup).HasForeignKey(e => e.LineupId).OnDelete(DeleteBehavior.Cascade);
@@ -81,11 +105,13 @@ public class FinTvDbContext : DbContext
         {
             entity.HasIndex(e => new { e.ChannelId, e.Start, e.Finish });
             entity.HasIndex(e => e.CommercialId);
+            entity.HasIndex(e => e.ProgramSourceId);
         });
 
         modelBuilder.Entity<PlayoutHistoryEntry>(entity =>
         {
             entity.HasIndex(e => new { e.ChannelId, e.AiredAt });
+            entity.HasIndex(e => e.ProgramSourceId);
         });
 
         modelBuilder.Entity<LogoSetEntry>(entity =>
