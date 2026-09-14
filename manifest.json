@@ -2,19 +2,19 @@
   {
     "guid": "8a3f6c2d-5b4e-4d9a-a721-3e6f8c1b2d47",
     "name": "Spectral TV",
-    "description": "Build always-on virtual television channels from your Jellyfin library with weighted programming, sequential or random episode progression, promos, bumpers, commercials, station IDs, M3U streaming, and XMLTV guide data.",
-    "overview": "Always-on virtual TV channels for Jellyfin",
+    "description": "Build automatic Jellyfin Live TV channels and resumable on-demand smart channels from shows, seasons, episodes, and movies. Choose balanced, weighted, random, block, alternating, shuffle, fixed-sequence, or custom-pattern programming; keep each show's episode progress independent; insert optional promos and bumpers; and use ordinary Jellyfin clients through native Live TV and private per-user playlists.",
+    "overview": "Virtual live and on-demand TV channels for Jellyfin",
     "owner": "SpecterNoir",
     "category": "LiveTV",
     "imageUrl": "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png",
     "versions": [
       {
-        "version": "0.0.3.82",
-        "changelog": "Ground-up Spectral TV overhaul: one guided channel workspace, direct Jellyfin library programming, optional breaks and logos, retired inherited workflows, UI contract validation, and Linux startup smoke testing.",
+        "version": "0.0.3.83",
+        "changelog": "- Add Channel Studio for automatic Live TV and resumable on-demand smart channels\n- Add balanced, weighted, and random live source selection while preserving independent sequential or random episode order\n- Add alternating, block, balanced-random, weighted-random, random, shuffle-cycle, fixed-sequence, and custom-pattern on-demand programming\n- Add separate promo, bumper, commercial, and station-ID pools that do not corrupt episode progress\n- Materialize enabled on-demand channels as private per-user Jellyfin playlists so normal clients can play them without a custom client\n- Track authenticated per-user progress and safely advance smart playlists only when Jellyfin playback belongs to the linked Spectral TV queue\n- Preserve Jellyfin user visibility rules, resume positions, Linux/Synology package sanitization, and startup safety checks",
         "targetAbi": "12.0.0.0",
-        "sourceUrl": "https://github.com/SpecterNoir/Spectral-TV/releases/download/beta/spectral-tv_0.0.3.82.zip",
-        "checksum": "f25a7fb3e26381e46e1d907d786884a5",
-        "timestamp": "2026-09-14T15:48:59Z"
+        "sourceUrl": "https://github.com/SpecterNoir/Spectral-TV/releases/download/beta/spectral-tv_0.0.3.83.zip",
+        "checksum": "a62d17d40329d3a80b9bfa4544810937",
+        "timestamp": "2026-09-14T15:51:34Z"
       }
     ]
   }
