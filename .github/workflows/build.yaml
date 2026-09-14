@@ -19,6 +19,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: spectral-tv-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -61,11 +65,6 @@ jobs:
           text = re.sub(
               r'(?m)^imageUrl:\s*.*$',
               'imageUrl: "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png"',
-              text,
-              count=1)
-          text = re.sub(
-              r'(?m)^overview:\s*.*$',
-              'overview: "Always-on virtual TV channels for Jellyfin with weighted programming, promos, bumpers, and IPTV streaming"',
               text,
               count=1)
           path.write_text(text, encoding='utf-8')
@@ -126,6 +125,13 @@ jobs:
           checksum=$(md5sum "$artifact" | awk '{print $1}')
           timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 
+          # Never let an older run replace a newer beta if main advanced while this job was building.
+          git fetch origin main
+          if [[ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]]; then
+            echo "::warning::main advanced while this build was running; skipping stale beta publication"
+            exit 0
+          fi
+
           git tag -f beta "${GITHUB_SHA}"
           git push origin refs/tags/beta --force
 
@@ -151,25 +157,27 @@ jobs:
           import json
           import os
           from pathlib import Path
+          import yaml
 
           repo = os.environ['GITHUB_REPOSITORY']
           version = os.environ['VERSION']
           checksum = os.environ['CHECKSUM']
           timestamp = os.environ['TIMESTAMP']
           zipname = os.environ['ZIPNAME']
+          config = yaml.safe_load(Path('build.yaml').read_text(encoding='utf-8'))
 
           manifest = [{
-              "guid": "8a3f6c2d-5b4e-4d9a-a721-3e6f8c1b2d47",
-              "name": "Spectral TV",
-              "description": "Build always-on virtual television channels from your Jellyfin library with weighted programming, sequential or random episode progression, promos, bumpers, commercials, station IDs, M3U streaming, and XMLTV guide data.",
-              "overview": "Always-on virtual TV channels for Jellyfin",
-              "owner": "SpecterNoir",
-              "category": "LiveTV",
-              "imageUrl": "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png",
+              "guid": config["guid"],
+              "name": config["name"],
+              "description": str(config.get("description", "")).strip(),
+              "overview": str(config.get("overview", "")).strip(),
+              "owner": config.get("owner", "SpecterNoir"),
+              "category": config.get("category", "LiveTV"),
+              "imageUrl": config.get("imageUrl", "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png"),
               "versions": [{
                   "version": version,
-                  "changelog": "Ground-up Spectral TV overhaul: one guided channel workspace, direct Jellyfin library programming, optional breaks and logos, retired inherited workflows, UI contract validation, and Linux startup smoke testing.",
-                  "targetAbi": "12.0.0.0",
+                  "changelog": str(config.get("changelog", "")).strip(),
+                  "targetAbi": config.get("targetAbi", "12.0.0.0"),
                   "sourceUrl": f"https://github.com/{repo}/releases/download/beta/{zipname}",
                   "checksum": checksum,
                   "timestamp": timestamp
@@ -178,10 +186,20 @@ jobs:
           Path('manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
           PY
 
+          # Re-check immediately before updating main. If anything moved, a newer workflow owns the manifest.
+          git fetch origin main
+          if [[ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]]; then
+            echo "::warning::main advanced before manifest update; leaving publication to the newer build"
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add manifest.json
           if ! git diff --cached --quiet; then
             git commit -m "Update Jellyfin plugin manifest for ${version} [skip ci]"
-            git push origin HEAD:main
+            if ! git push origin HEAD:main; then
+              echo "::warning::main advanced during manifest push; a newer build will publish the manifest"
+              exit 0
+            fi
           fi
