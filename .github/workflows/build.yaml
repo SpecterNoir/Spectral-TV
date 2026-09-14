@@ -3,17 +3,17 @@ name: '🏗️ Build Plugin'
 on:
   push:
     branches:
-      - master
       - main
       - feature/weighted-channels
     paths-ignore:
       - '**/*.md'
+      - 'manifest.json'
   pull_request:
     branches:
-      - master
       - main
     paths-ignore:
       - '**/*.md'
+      - 'manifest.json'
   workflow_dispatch:
 
 permissions:
@@ -48,16 +48,24 @@ jobs:
         run: python3 scripts/update-build-artifacts.py
 
       - name: Mark development build
-        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/feature/weighted-channels'
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/weighted-channels'
+        env:
+          BUILD_VERSION: 0.0.3.${{ github.run_number }}
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import os
           import re
 
           path = Path('build.yaml')
           text = path.read_text(encoding='utf-8')
-          text = re.sub(r'(?m)^version:\s*.*$', 'version: "0.0.3.0"', text, count=1)
+          text = re.sub(r'(?m)^version:\s*.*$', f'version: "{os.environ["BUILD_VERSION"]}"', text, count=1)
           text = re.sub(r'(?m)^owner:\s*.*$', 'owner: "SpecterNoir"', text, count=1)
+          text = re.sub(
+              r'(?m)^imageUrl:\s*.*$',
+              'imageUrl: "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png"',
+              text,
+              count=1)
           text = re.sub(
               r'(?m)^overview:\s*.*$',
               'overview: "Always-on virtual TV channels for Jellyfin with weighted programming, promos, bumpers, and IPTV streaming"',
@@ -80,32 +88,80 @@ jobs:
           if-no-files-found: error
           path: ${{ steps.jprm.outputs.artifact }}
 
-      - name: Publish rolling beta release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/weighted-channels'
+      - name: Publish rolling beta and Jellyfin manifest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           artifact="${{ steps.jprm.outputs.artifact }}"
+          zipname=$(basename "$artifact")
+          version=$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+          text = Path('build.yaml').read_text(encoding='utf-8')
+          print(re.search(r'(?m)^version:\s*["\x27]?([^"\x27\n]+)', text).group(1).strip())
+          PY
+          )
+          checksum=$(md5sum "$artifact" | awk '{print $1}')
+          timestamp=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+
           git tag -f beta "${GITHUB_SHA}"
           git push origin refs/tags/beta --force
 
           if gh release view beta >/dev/null 2>&1; then
             gh release view beta --json assets --jq '.assets[].name' | while read -r asset_name; do
               case "$asset_name" in
-                *.zip)
-                  gh release delete-asset beta "$asset_name" -y
-                  ;;
+                *.zip) gh release delete-asset beta "$asset_name" -y ;;
               esac
             done
             gh release upload beta "$artifact"
             gh release edit beta \
               --title "Spectral TV Latest Beta" \
-              --notes "Latest installable Jellyfin 12 beta of Spectral TV, built automatically from feature/weighted-channels." \
+              --notes "Latest installable Jellyfin 12 beta of Spectral TV, built automatically from main." \
               --prerelease
           else
             gh release create beta "$artifact" \
               --title "Spectral TV Latest Beta" \
-              --notes "Latest installable Jellyfin 12 beta of Spectral TV, built automatically from feature/weighted-channels." \
+              --notes "Latest installable Jellyfin 12 beta of Spectral TV, built automatically from main." \
               --prerelease
+          fi
+
+          VERSION="$version" CHECKSUM="$checksum" TIMESTAMP="$timestamp" ZIPNAME="$zipname" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          version = os.environ['VERSION']
+          checksum = os.environ['CHECKSUM']
+          timestamp = os.environ['TIMESTAMP']
+          zipname = os.environ['ZIPNAME']
+
+          manifest = [{
+              "guid": "8a3f6c2d-5b4e-4d9a-a721-3e6f8c1b2d47",
+              "name": "Spectral TV",
+              "description": "Build always-on virtual television channels from your Jellyfin library with weighted programming, sequential or random episode progression, promos, bumpers, commercials, station IDs, M3U streaming, and XMLTV guide data.",
+              "overview": "Always-on virtual TV channels for Jellyfin",
+              "owner": "SpecterNoir",
+              "category": "LiveTV",
+              "imageUrl": "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png",
+              "versions": [{
+                  "version": version,
+                  "changelog": "Development beta for Jellyfin 12: weighted programming, separate filler pools, persistent playout, M3U/XMLTV Live TV integration, and Spectral TV dashboard controls.",
+                  "targetAbi": "12.0.0.0",
+                  "sourceUrl": f"https://github.com/{repo}/releases/download/beta/{zipname}",
+                  "checksum": checksum,
+                  "timestamp": timestamp
+              }]
+          }]
+          Path('manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update Jellyfin plugin manifest for ${version} [skip ci]"
+            git push origin HEAD:main
           fi
