@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Repo = "binarygeek119/open-channel-logos"
-$GitRef = "spectraltv2"
+$GitRef = "22b4bbd3e5882d18cdf6b6c66b55c6e386405d49"
 $TreeUrl = "https://api.github.com/repos/$Repo/git/trees/$GitRef`?recursive=1"
 $RawBase = "https://raw.githubusercontent.com/$Repo/$GitRef/"
 $LogoPrefixes = @(
