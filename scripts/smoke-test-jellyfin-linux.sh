@@ -70,10 +70,30 @@ if grep -Eiq 'BadImageFormatException|Disabling plugin.*Spectral|Spectral TV.*Di
   exit 1
 fi
 
+# A brand-new CI server is still behind Jellyfin's first-run middleware. Complete only
+# the ephemeral container's wizard before exercising ordinary plugin API routes. This
+# mirrors a real installed server without creating credentials or mutating any user NAS.
+wizard_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
+  -X POST http://127.0.0.1:18096/Startup/Complete || true)
+if [[ "$wizard_code" != "204" ]]; then
+  echo "Could not complete the ephemeral Jellyfin startup wizard (HTTP $wizard_code)." >&2
+  docker logs "$container" >&2 || true
+  exit 1
+fi
+
 # Activate the anonymous setup-URL action so CI verifies that Jellyfin can construct the
 # setup controller with its native ITunerHostManager/IListingsManager dependencies. This
 # catches DI/API compatibility problems before a NAS administrator can press Connect.
-setup_json=$(curl -fsS --max-time 5 http://127.0.0.1:18096/SpectralTV/api/setup/urls)
+setup_body="$workdir/setup.json"
+setup_code=$(curl -sS -o "$setup_body" -w '%{http_code}' --max-time 5 \
+  http://127.0.0.1:18096/SpectralTV/api/setup/urls || true)
+if [[ "$setup_code" != "200" ]]; then
+  echo "Spectral TV setup controller returned HTTP $setup_code instead of 200." >&2
+  cat "$setup_body" >&2 || true
+  docker logs "$container" >&2 || true
+  exit 1
+fi
+setup_json=$(cat "$setup_body")
 if [[ "$setup_json" != *"/SpectralTV/iptv/channels.m3u"* || "$setup_json" != *"/SpectralTV/iptv/epg.xml"* ]]; then
   echo "Spectral TV setup controller did not return the expected native Live TV URLs." >&2
   echo "$setup_json" >&2
