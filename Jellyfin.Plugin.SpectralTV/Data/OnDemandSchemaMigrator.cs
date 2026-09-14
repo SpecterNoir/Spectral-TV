@@ -105,6 +105,27 @@ internal static class OnDemandSchemaMigrator
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_OnDemandProgress_ChannelId_ProgressKey\" ON \"OnDemandProgress\" (\"ChannelId\", \"ProgressKey\");",
             cancellationToken);
 
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "OnDemandPlaylistLinks" (
+                "Id" TEXT NOT NULL PRIMARY KEY,
+                "ChannelId" TEXT NOT NULL,
+                "UserId" TEXT NOT NULL,
+                "JellyfinPlaylistId" TEXT NOT NULL,
+                "QueueProgramCount" INTEGER NOT NULL DEFAULT 24,
+                "LastSyncedAt" TEXT NOT NULL,
+                FOREIGN KEY("ChannelId") REFERENCES "OnDemandChannels"("Id") ON DELETE CASCADE
+            );
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_OnDemandPlaylistLinks_ChannelId_UserId\" ON \"OnDemandPlaylistLinks\" (\"ChannelId\", \"UserId\");",
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_OnDemandPlaylistLinks_JellyfinPlaylistId\" ON \"OnDemandPlaylistLinks\" (\"JellyfinPlaylistId\");",
+            cancellationToken);
+
         // Existing weighted-programming installs need this column. Keeping the operation idempotent protects upgrades.
         await AddColumnIfMissingAsync(db, "ChannelProgrammingSettings", "SelectionMode", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
     }
