@@ -14,7 +14,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Jellyfin.Plugin.SpectralTV.Api;
 
 /// <summary>
-/// Configuration API for continuous weighted virtual-TV channels.
+/// Configuration API for continuous automatic virtual-TV channels.
 /// </summary>
 [ApiController]
 [Route("SpectralTV/api/programming")]
@@ -75,7 +75,7 @@ public class ProgrammingController : ControllerBase
     [HttpPut("{channelId:guid}/settings")]
     public async Task<IActionResult> SaveSettings(
         Guid channelId,
-        [FromBody] ChannelProgrammingSettings request,
+        [FromBody] ChannelProgrammingSettingsRequest request,
         CancellationToken cancellationToken)
     {
         if (!await _db.Channels.AnyAsync(c => c.Id == channelId, cancellationToken))
@@ -83,7 +83,23 @@ public class ProgrammingController : ControllerBase
             return NotFound();
         }
 
-        var saved = await _programming.SaveSettingsAsync(channelId, request, cancellationToken);
+        // Older/current admin pages do not know about SelectionMode. Preserve the existing value when
+        // that field is omitted so saving break settings can never silently change automatic rotation.
+        var current = await _programming.GetSettingsAsync(channelId, cancellationToken);
+        var settings = new ChannelProgrammingSettings
+        {
+            ChannelId = channelId,
+            Enabled = request.Enabled,
+            SelectionMode = request.SelectionMode ?? current.SelectionMode,
+            FillerEnabled = request.FillerEnabled,
+            FillerChancePercent = request.FillerChancePercent,
+            MinFillerItems = request.MinFillerItems,
+            MaxFillerItems = request.MaxFillerItems,
+            MaxFillerSeconds = request.MaxFillerSeconds,
+            FillerRepeatWindow = request.FillerRepeatWindow
+        };
+
+        var saved = await _programming.SaveSettingsAsync(channelId, settings, cancellationToken);
         return Ok(saved);
     }
 
@@ -305,6 +321,25 @@ public class ProgrammingController : ControllerBase
 
     private static double ClampAirtime(double value)
         => Math.Clamp(double.IsFinite(value) ? value : 1, 0.1, 10000);
+}
+
+public class ChannelProgrammingSettingsRequest
+{
+    public bool Enabled { get; set; }
+
+    public LiveSelectionMode? SelectionMode { get; set; }
+
+    public bool FillerEnabled { get; set; } = true;
+
+    public int FillerChancePercent { get; set; } = 100;
+
+    public int MinFillerItems { get; set; } = 1;
+
+    public int MaxFillerItems { get; set; } = 2;
+
+    public int MaxFillerSeconds { get; set; } = 180;
+
+    public int FillerRepeatWindow { get; set; } = 12;
 }
 
 public class ProgramSourceRequest
