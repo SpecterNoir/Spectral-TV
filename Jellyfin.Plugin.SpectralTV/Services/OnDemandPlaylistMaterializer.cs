@@ -1,5 +1,6 @@
 using Jellyfin.Plugin.SpectralTV.Data;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Playlists;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -8,14 +9,14 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.SpectralTV.Services;
 
 /// <summary>
-/// Keeps enabled Spectral TV on-demand channels materialized as private Jellyfin playlists for each
-/// Jellyfin user. This is intentionally a delayed/background convenience layer: any failure is logged
-/// and contained, and Jellyfin startup never waits on playlist generation.
+/// Makes enabled Spectral TV on-demand channels appear as private Jellyfin playlists for each user.
+/// Existing healthy playlists are deliberately left alone: playback events refresh them at safe
+/// boundaries, so this background discovery loop never rewrites a queue while a client may be using it.
 /// </summary>
 public sealed class OnDemandPlaylistMaterializer : BackgroundService
 {
     private static readonly TimeSpan InitialDelay = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan DiscoveryInterval = TimeSpan.FromMinutes(15);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OnDemandPlaylistMaterializer> _logger;
@@ -43,7 +44,7 @@ public sealed class OnDemandPlaylistMaterializer : BackgroundService
         {
             try
             {
-                await SyncAllAsync(stoppingToken).ConfigureAwait(false);
+                await DiscoverMissingPlaylistsAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -51,12 +52,12 @@ public sealed class OnDemandPlaylistMaterializer : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Spectral TV background playlist refresh failed; the next scheduled refresh will retry");
+                _logger.LogError(ex, "Spectral TV playlist discovery failed; the next scheduled pass will retry");
             }
 
             try
             {
-                await Task.Delay(RefreshInterval, stoppingToken).ConfigureAwait(false);
+                await Task.Delay(DiscoveryInterval, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -65,7 +66,7 @@ public sealed class OnDemandPlaylistMaterializer : BackgroundService
         }
     }
 
-    private async Task SyncAllAsync(CancellationToken cancellationToken)
+    private async Task DiscoverMissingPlaylistsAsync(CancellationToken cancellationToken)
     {
         List<Guid> channelIds;
         List<Guid> userIds;
@@ -98,7 +99,15 @@ public sealed class OnDemandPlaylistMaterializer : BackgroundService
                     // EF context in a state that could affect another household user's channel.
                     using var pairScope = _scopeFactory.CreateScope();
                     var playlists = pairScope.ServiceProvider.GetRequiredService<OnDemandPlaylistService>();
+                    var playlistManager = pairScope.ServiceProvider.GetRequiredService<IPlaylistManager>();
                     var existing = await playlists.GetLinkAsync(channelId, userId, cancellationToken).ConfigureAwait(false);
+
+                    if (existing is not null
+                        && playlistManager.GetPlaylistForUser(existing.JellyfinPlaylistId, userId) is not null)
+                    {
+                        continue;
+                    }
+
                     await playlists.SyncAsync(
                         channelId,
                         userId,
@@ -114,7 +123,7 @@ public sealed class OnDemandPlaylistMaterializer : BackgroundService
                 {
                     _logger.LogWarning(
                         ex,
-                        "Could not refresh Spectral TV on-demand channel {ChannelId} for Jellyfin user {UserId}",
+                        "Could not materialize Spectral TV on-demand channel {ChannelId} for Jellyfin user {UserId}",
                         channelId,
                         userId);
                 }
