@@ -17,18 +17,15 @@ public class EpgService
     private readonly SpectralTvDbContext _db;
     private readonly HolidayChannelService _holidays;
     private readonly GuideMetadataService _guideMetadata;
-    private readonly WeatherGuideMetadataService _weatherGuideMetadata;
 
     public EpgService(
         SpectralTvDbContext db,
         HolidayChannelService holidays,
-        GuideMetadataService guideMetadata,
-        WeatherGuideMetadataService weatherGuideMetadata)
+        GuideMetadataService guideMetadata)
     {
         _db = db;
         _holidays = holidays;
         _guideMetadata = guideMetadata;
-        _weatherGuideMetadata = weatherGuideMetadata;
     }
 
     public async Task<byte[]> GenerateXmlTvBytesAsync(string baseUrl, CancellationToken cancellationToken = default)
@@ -44,14 +41,19 @@ public class EpgService
 
     private async Task<XDocument> BuildXmlTvDocumentAsync(string baseUrl, CancellationToken cancellationToken)
     {
-        var channels = await _db.Channels.Where(c => c.Enabled).OrderBy(c => c.Number).AsNoTracking().ToListAsync(cancellationToken);
+        var channels = await _db.Channels
+            .Where(c => c.Enabled && (c.ContentType == ChannelContentType.TvShow || c.ContentType == ChannelContentType.Movie))
+            .OrderBy(c => c.Number)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        var channelIds = channels.Select(c => c.Id).ToHashSet();
         var start = DateTime.UtcNow.AddHours(-3);
         var end = DateTime.UtcNow.AddDays(PlayoutScheduleHelper.GetPlayoutDaysToBuild());
 
         var root = new XElement(
             "tv",
             new XAttribute("generator-info-name", "SpectralTV"),
-            new XAttribute("generator-info-url", "https://github.com/SpecterNoir/Jellyfin-TV"));
+            new XAttribute("generator-info-url", "https://github.com/SpecterNoir/Spectral-TV"));
 
         foreach (var channel in channels)
         {
@@ -65,7 +67,7 @@ public class EpgService
         }
 
         var rawItems = await _db.PlayoutItems
-            .Where(p => p.Finish > start && p.Start < end)
+            .Where(p => channelIds.Contains(p.ChannelId) && p.Finish > start && p.Start < end)
             .OrderBy(p => p.ChannelId)
             .ThenBy(p => p.Start)
             .AsNoTracking()
@@ -74,31 +76,17 @@ public class EpgService
         // Promos, bumpers, station IDs, and commercials are part of the TV presentation rather than
         // standalone guide programmes. Fold contiguous filler into the preceding program's guide window.
         var items = BuildGuideItems(rawItems);
-
         var metadataByItemId = _guideMetadata.ResolveBatch(items.Select(i => i.JellyfinItemId));
-        var channelsById = channels.ToDictionary(c => c.Id);
-        var weatherItems = items
-            .Where(i => i.IsVirtual && i.VirtualSource == VirtualContentSource.WeatherStar)
-            .ToList();
-        var weatherMetadataByPlayoutId = await _weatherGuideMetadata.ResolveAsync(
-            weatherItems,
-            channelsById,
-            channel => GetLogoUrl(channel, baseUrl),
-            cancellationToken);
 
         foreach (var item in items)
         {
             GuideProgramMetadata? metadata = null;
-            if (weatherMetadataByPlayoutId.TryGetValue(item.Id, out var weatherMetadata))
-            {
-                metadata = weatherMetadata;
-            }
-            else if (item.JellyfinItemId.HasValue)
+            if (item.JellyfinItemId.HasValue)
             {
                 metadataByItemId.TryGetValue(item.JellyfinItemId.Value, out metadata);
             }
 
-            root.Add(BuildProgrammeElement(item, metadata, baseUrl));
+            root.Add(BuildProgrammeElement(item, metadata));
         }
 
         return new XDocument(new XDeclaration("1.0", "UTF-8", null), root);
@@ -141,7 +129,7 @@ public class EpgService
         return result.OrderBy(i => i.ChannelId).ThenBy(i => i.Start).ToList();
     }
 
-    private static XElement BuildProgrammeElement(PlayoutItem item, GuideProgramMetadata? metadata, string baseUrl)
+    private static XElement BuildProgrammeElement(PlayoutItem item, GuideProgramMetadata? metadata)
     {
         var programme = new XElement(
             "programme",
@@ -202,12 +190,9 @@ public class EpgService
                 metadata.OfficialRating));
         }
 
-        var posterUrl = !string.IsNullOrWhiteSpace(metadata?.IconUrl)
-            ? metadata.IconUrl
-            : GuideMetadataService.GetPosterUrl(baseUrl, metadata?.PosterItemId);
-        if (!string.IsNullOrWhiteSpace(posterUrl))
+        if (!string.IsNullOrWhiteSpace(metadata?.IconUrl))
         {
-            programme.Add(new XElement("icon", new XAttribute("src", posterUrl)));
+            programme.Add(new XElement("icon", new XAttribute("src", metadata.IconUrl)));
         }
 
         return programme;
@@ -240,7 +225,11 @@ public class EpgService
 
     public async Task<string> GenerateM3uAsync(string baseUrl, CancellationToken cancellationToken = default)
     {
-        var channels = await _db.Channels.Where(c => c.Enabled).OrderBy(c => c.Number).AsNoTracking().ToListAsync(cancellationToken);
+        var channels = await _db.Channels
+            .Where(c => c.Enabled && (c.ContentType == ChannelContentType.TvShow || c.ContentType == ChannelContentType.Movie))
+            .OrderBy(c => c.Number)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
         var sb = new StringBuilder();
         sb.AppendLine("#EXTM3U");
 
