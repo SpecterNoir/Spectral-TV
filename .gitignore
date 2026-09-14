@@ -50,7 +50,7 @@ msbuild.wrn
 *.db-wal
 
 # Bundled logos fetched at build time
-Jellyfin.Plugin.FinTV/Assets/logos/
+Jellyfin.Plugin.SpectralTV/Assets/logos/
 # Bundled yt-dlp fetched at build time
-Jellyfin.Plugin.FinTV/Assets/tools/yt-dlp/
+Jellyfin.Plugin.SpectralTV/Assets/tools/yt-dlp/
 release-artifact/

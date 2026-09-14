@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to publish (e.g. v0.0.2.45)'
+        description: 'Release tag to publish (e.g. v0.0.3.0)'
         required: true
         type: string
 
@@ -33,12 +33,12 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Checkout release tag
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           ref: ${{ steps.release.outputs.tag }}
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
         with:
           dotnet-version: '10.0.x'
 
@@ -53,10 +53,10 @@ jobs:
       - name: Fetch bundled Binarygeek119 logos
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 scripts/fetch-binarygeek119-logos.py Jellyfin.Plugin.FinTV/Assets/logos/binarygeek119
+        run: python3 scripts/fetch-binarygeek119-logos.py Jellyfin.Plugin.SpectralTV/Assets/logos/binarygeek119
 
       - name: Restore NuGet packages
-        run: dotnet restore Jellyfin.Plugin.FinTV/Jellyfin.Plugin.FinTV.csproj
+        run: dotnet restore Jellyfin.Plugin.SpectralTV/Jellyfin.Plugin.SpectralTV.csproj
 
       - name: Update build.yaml logo artifacts
         run: python3 scripts/update-build-artifacts.py
@@ -78,7 +78,6 @@ jobs:
           import os
           import shutil
           import zipfile
-
           import yaml
 
           zip_path = os.environ["ZIPFILE"]
@@ -89,23 +88,20 @@ jobs:
           if not assemblies:
               raise SystemExit("build.yaml must define assemblies")
 
-          IMAGE_RESOURCE = "Jellyfin.Plugin.FinTV.logo.png"
-
+          image_resource = "Jellyfin.Plugin.SpectralTV.logo.png"
           tmp_path = f"{zip_path}.tmp"
           with zipfile.ZipFile(zip_path, "r") as zin, zipfile.ZipFile(tmp_path, "w") as zout:
               for item in zin.infolist():
                   if item.filename == "logo.png":
                       continue
-
                   data = zin.read(item.filename)
                   if item.filename == "meta.json":
                       meta = json.loads(data)
                       meta["assemblies"] = assemblies
-                      meta["imageResourceName"] = IMAGE_RESOURCE
+                      meta["imageResourceName"] = image_resource
                       meta["imagePath"] = ""
                       data = json.dumps(meta, indent=4, sort_keys=True).encode("utf-8")
                   zout.writestr(item, data)
-
           shutil.move(tmp_path, zip_path)
           PY
         env:

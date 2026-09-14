@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - main
+      - feature/weighted-channels
     paths-ignore:
       - '**/*.md'
   pull_request:
@@ -15,12 +16,17 @@ on:
       - '**/*.md'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7
@@ -33,13 +39,32 @@ jobs:
           python-version: '3.x'
 
       - name: Fetch bundled Binarygeek119 logos
-        run: python3 scripts/fetch-binarygeek119-logos.py Jellyfin.Plugin.FinTV/Assets/logos/binarygeek119
+        run: python3 scripts/fetch-binarygeek119-logos.py Jellyfin.Plugin.SpectralTV/Assets/logos/binarygeek119
 
       - name: Restore NuGet packages
-        run: dotnet restore Jellyfin.Plugin.FinTV/Jellyfin.Plugin.FinTV.csproj
+        run: dotnet restore Jellyfin.Plugin.SpectralTV/Jellyfin.Plugin.SpectralTV.csproj
 
       - name: Update build.yaml logo artifacts
         run: python3 scripts/update-build-artifacts.py
+
+      - name: Mark development build
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/feature/weighted-channels'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('build.yaml')
+          text = path.read_text(encoding='utf-8')
+          text = re.sub(r'(?m)^version:\s*.*$', 'version: "0.0.3.0"', text, count=1)
+          text = re.sub(r'(?m)^owner:\s*.*$', 'owner: "SpecterNoir"', text, count=1)
+          text = re.sub(
+              r'(?m)^overview:\s*.*$',
+              'overview: "Always-on virtual TV channels for Jellyfin with weighted programming, promos, bumpers, and IPTV streaming"',
+              text,
+              count=1)
+          path.write_text(text, encoding='utf-8')
+          PY
 
       - name: Build Jellyfin Plugin
         uses: oddstr13/jellyfin-plugin-repository-manager@9497a0a499416cc572ed2e07a391d9f943a37b4d
@@ -54,3 +79,33 @@ jobs:
           retention-days: 30
           if-no-files-found: error
           path: ${{ steps.jprm.outputs.artifact }}
+
+      - name: Publish rolling beta release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/weighted-channels'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          artifact="${{ steps.jprm.outputs.artifact }}"
+          git tag -f beta "${GITHUB_SHA}"
+          git push origin refs/tags/beta --force
+
+          if gh release view beta >/dev/null 2>&1; then
+            gh release view beta --json assets --jq '.assets[].name' | while read -r asset_name; do
+              case "$asset_name" in
+                *.zip)
+                  gh release delete-asset beta "$asset_name" -y
+                  ;;
+              esac
+            done
+            gh release upload beta "$artifact"
+            gh release edit beta \
+              --title "Spectral TV Latest Beta" \
+              --notes "Latest installable Jellyfin 12 beta of Spectral TV, built automatically from feature/weighted-channels." \
+              --prerelease
+          else
+            gh release create beta "$artifact" \
+              --title "Spectral TV Latest Beta" \
+              --notes "Latest installable Jellyfin 12 beta of Spectral TV, built automatically from feature/weighted-channels." \
+              --prerelease
+          fi

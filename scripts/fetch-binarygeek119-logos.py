@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download FinTV channel logos from the open-channel-logos fintv2 branch."""
+"""Download Spectral TV channel logos from the pinned open-channel-logos source revision."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import urllib.request
 from pathlib import Path
 
 REPO = "binarygeek119/open-channel-logos"
-GIT_REF = "fintv2"
+GIT_REF = "22b4bbd3e5882d18cdf6b6c66b55c6e386405d49"
 TREE_URL = f"https://api.github.com/repos/{REPO}/git/trees/{GIT_REF}?recursive=1"
 RAW_BASE = f"https://raw.githubusercontent.com/{REPO}/{GIT_REF}/"
 LOGO_PREFIXES = (
@@ -39,7 +39,7 @@ def is_logo_path(path: str) -> bool:
 def build_request(url: str) -> urllib.request.Request:
     headers = {
         "Accept": "application/vnd.github+json",
-        "User-Agent": "FinTV-Jellyfin-Plugin",
+        "User-Agent": "SpectralTV-Jellyfin-Plugin",
     }
     token = os.environ.get("GITHUB_TOKEN")
     if token:
@@ -76,7 +76,7 @@ def download_file(repo_path: str, destination: Path) -> None:
 
 
 def main() -> int:
-    output_dir = Path(sys.argv[1] if len(sys.argv) > 1 else "Jellyfin.Plugin.FinTV/Assets/logos/binarygeek119")
+    output_dir = Path(sys.argv[1] if len(sys.argv) > 1 else "Jellyfin.Plugin.SpectralTV/Assets/logos/binarygeek119")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     files = [
