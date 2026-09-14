@@ -48,13 +48,15 @@ public class OnDemandPlaylistService
 
     /// <summary>
     /// Creates or refreshes the private Jellyfin playlist for one user/channel pair.
-    /// Calling this also ensures that a current program exists in the user's Spectral TV progress.
+    /// When <paramref name="leadingSegment"/> is supplied, its promos/bumpers are preserved at the
+    /// front of the new playlist; this is used immediately after completing a program.
     /// </summary>
     public async Task<OnDemandPlaylistSyncResult> SyncAsync(
         Guid channelId,
         Guid userId,
         int programCount = 24,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        OnDemandQueueResult? leadingSegment = null)
     {
         if (userId == Guid.Empty)
         {
@@ -75,9 +77,18 @@ public class OnDemandPlaylistService
         programCount = Math.Clamp(programCount, 4, 100);
         var progressKey = GetUserProgressKey(userId);
 
-        // Persist a real current program. If a recipe references media hidden from this Jellyfin user,
-        // skip it rather than leaving the user's smart channel stuck on an item they cannot open.
-        var current = await GetNextVisibleAsync(channelId, progressKey, user, cancellationToken);
+        OnDemandQueueResult current;
+        if (leadingSegment is not null && IsCurrentVisible(leadingSegment, user))
+        {
+            current = leadingSegment;
+        }
+        else
+        {
+            // Persist a real current program. If a recipe references media hidden from this Jellyfin user,
+            // skip it rather than leaving the user's smart channel stuck on an item they cannot open.
+            current = await GetNextVisibleAsync(channelId, progressKey, user, cancellationToken);
+        }
+
         var preview = await _sequence.PreviewAsync(channelId, programCount, progressKey, cancellationToken);
         var queueIds = MergeQueue(current, preview);
         if (queueIds.Count == 0)
@@ -179,6 +190,19 @@ public class OnDemandPlaylistService
         => await _db.OnDemandPlaylistLinks
             .AsNoTracking()
             .FirstOrDefaultAsync(l => l.ChannelId == channelId && l.UserId == userId, cancellationToken);
+
+    private bool IsCurrentVisible(
+        OnDemandQueueResult result,
+        Jellyfin.Database.Implementations.Entities.User user)
+    {
+        if (result.Progress.CurrentItemId is not Guid currentId)
+        {
+            return false;
+        }
+
+        var item = _libraryManager.GetItemById(currentId);
+        return item is not null && item.IsVisible(user);
+    }
 
     private async Task<OnDemandQueueResult> GetNextVisibleAsync(
         Guid channelId,
