@@ -110,6 +110,11 @@ public class ChannelPresetDefinition
     public string? FilterJson { get; set; }
     public ChannelCatalogMode? CatalogMode { get; set; }
 
+    /// <summary>
+    /// Legacy compatibility for older logo-matching code. Spectral TV no longer ships weather presets.
+    /// </summary>
+    public bool IsWeatherChannel => false;
+
     public decimal GetNumber(ChannelPresetNumberingMode mode)
         => mode == ChannelPresetNumberingMode.Subchannels ? SubchannelNumber : LegacyNumber;
 }
