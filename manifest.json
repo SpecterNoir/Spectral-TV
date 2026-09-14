@@ -9,12 +9,12 @@
     "imageUrl": "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png",
     "versions": [
       {
-        "version": "0.0.3.48",
-        "changelog": "Development beta for Jellyfin 12 Linux/Synology with startup isolation, package safety validation, and automated Jellyfin startup smoke testing, plus weighted programming, filler pools, persistent playout, M3U/XMLTV Live TV integration, and dashboard controls.",
+        "version": "0.0.3.58",
+        "changelog": "Development beta for Jellyfin 12 Linux/Synology with a simplified admin interface, TV/movie-only channel creation, startup isolation, package safety validation, and automated Jellyfin startup smoke testing.",
         "targetAbi": "12.0.0.0",
-        "sourceUrl": "https://github.com/SpecterNoir/Spectral-TV/releases/download/beta/spectral-tv_0.0.3.48.zip",
-        "checksum": "4a9fb3810d97053006dd497e79947d2e",
-        "timestamp": "2026-09-14T09:43:05Z"
+        "sourceUrl": "https://github.com/SpecterNoir/Spectral-TV/releases/download/beta/spectral-tv_0.0.3.58.zip",
+        "checksum": "7813d2d79074f73bb5c25cd1f7418eff",
+        "timestamp": "2026-09-14T11:23:59Z"
       }
     ]
   }
