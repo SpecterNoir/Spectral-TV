@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Jellyfin.Plugin.SpectralTV.Data;
 using Jellyfin.Plugin.SpectralTV.Domain;
 using Microsoft.EntityFrameworkCore;
@@ -40,10 +39,9 @@ public class LineupGeneratorService
         PlayoutBuildMode mode = PlayoutBuildMode.ReplaceWindow,
         CancellationToken cancellationToken = default)
     {
-        if (channel.ContentType == ChannelContentType.Weather)
+        if (channel.ContentType is not ChannelContentType.TvShow and not ChannelContentType.Movie)
         {
-            await BuildWeatherPlayoutAsync(channel, startUtc, endUtc, mode, cancellationToken);
-            return;
+            throw new InvalidOperationException("Spectral TV supports TV Show and Movie channels only.");
         }
 
         if (await _weightedProgramming.IsEnabledAsync(channel.Id, cancellationToken))
@@ -125,23 +123,16 @@ public class LineupGeneratorService
                 contentEnd = contentStart.Add(picked.Duration);
             }
 
-            if (channel.ContentType == ChannelContentType.Music && picked.JellyfinItemId.HasValue)
+            _db.PlayoutItems.Add(new PlayoutItem
             {
-                await AddMusicPlayoutItemAsync(channel, picked, contentStart, contentEnd, cancellationToken);
-            }
-            else
-            {
-                _db.PlayoutItems.Add(new PlayoutItem
-                {
-                    ChannelId = channel.Id,
-                    JellyfinItemId = picked.JellyfinItemId,
-                    Start = contentStart,
-                    Finish = contentEnd,
-                    Title = picked.Title,
-                    IsVirtual = picked.IsVirtual,
-                    VirtualSource = picked.VirtualSource
-                });
-            }
+                ChannelId = channel.Id,
+                JellyfinItemId = picked.JellyfinItemId,
+                Start = contentStart,
+                Finish = contentEnd,
+                Title = picked.Title,
+                IsVirtual = picked.IsVirtual,
+                VirtualSource = picked.VirtualSource
+            });
 
             await _commercialService.InsertCommercialsAsync(channel, picked, contentStart, contentEnd, cancellationToken);
 
@@ -181,80 +172,6 @@ public class LineupGeneratorService
         }
 
         return false;
-    }
-
-    private async Task AddMusicPlayoutItemAsync(
-        Channel channel,
-        ResolvedCandidate picked,
-        DateTime start,
-        DateTime finish,
-        CancellationToken cancellationToken)
-    {
-        _ = cancellationToken;
-        _db.PlayoutItems.Add(new PlayoutItem
-        {
-            ChannelId = channel.Id,
-            JellyfinItemId = picked.JellyfinItemId,
-            Start = start,
-            Finish = finish,
-            Title = picked.Title,
-            IsVirtual = true,
-            VirtualSource = VirtualContentSource.MusicArtSlide
-        });
-
-        await Task.CompletedTask;
-    }
-
-    private async Task BuildWeatherPlayoutAsync(
-        Channel channel,
-        DateTime startUtc,
-        DateTime endUtc,
-        PlayoutBuildMode mode,
-        CancellationToken cancellationToken)
-    {
-        if (mode == PlayoutBuildMode.ReplaceWindow)
-        {
-            var existing = await _db.PlayoutItems
-                .Where(p => p.ChannelId == channel.Id && p.Finish > startUtc && p.Start < endUtc)
-                .ToListAsync(cancellationToken);
-
-            _db.PlayoutItems.RemoveRange(existing);
-        }
-
-        var appendStart = startUtc;
-        if (mode == PlayoutBuildMode.ExtendHorizon)
-        {
-            var latestFinish = await _db.PlayoutItems
-                .Where(p =>
-                    p.ChannelId == channel.Id
-                    && p.IsVirtual
-                    && p.VirtualSource == VirtualContentSource.WeatherStar
-                    && p.Finish > startUtc)
-                .Select(p => (DateTime?)p.Finish)
-                .MaxAsync(cancellationToken);
-
-            if (latestFinish.HasValue && latestFinish.Value > appendStart)
-            {
-                appendStart = latestFinish.Value;
-            }
-        }
-
-        var tz = WeatherLineupHelper.GetScheduleTimeZone();
-        foreach (var (blockStart, blockEnd) in WeatherLineupHelper.BuildHourBlocksUtc(appendStart, endUtc, tz))
-        {
-            _db.PlayoutItems.Add(new PlayoutItem
-            {
-                ChannelId = channel.Id,
-                Start = blockStart,
-                Finish = blockEnd,
-                Title = WeatherLineupHelper.FormatHourTitle(blockStart, tz),
-                IsVirtual = true,
-                VirtualSource = VirtualContentSource.WeatherStar
-            });
-        }
-
-        channel.LastPlayoutBuiltAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync(cancellationToken);
     }
 
     private Task AddHolidayOfflineBlockAsync(
