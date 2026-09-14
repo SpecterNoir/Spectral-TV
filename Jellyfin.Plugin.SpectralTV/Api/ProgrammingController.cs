@@ -105,7 +105,7 @@ public class ProgrammingController : ControllerBase
 
         if (!IsSupportedProgramItem(item))
         {
-            return BadRequest(new { message = "Programming sources must be a series, season, episode, movie, or music video." });
+            return BadRequest(new { message = "Programming sources must be a series, season, episode, or movie." });
         }
 
         if (await _db.ChannelProgramSources.AnyAsync(
@@ -287,7 +287,7 @@ public class ProgrammingController : ControllerBase
     }
 
     private static bool IsSupportedProgramItem(BaseItem item)
-        => item is Series or Season or Episode or Movie || item.GetBaseItemKind().ToString() == "MusicVideo";
+        => item is Series or Season or Episode or Movie;
 
     private static int? GetRuntimeMinutes(BaseItem? item)
         => item?.RunTimeTicks is long ticks ? (int)Math.Round(TimeSpan.FromTicks(ticks).TotalMinutes) : null;
