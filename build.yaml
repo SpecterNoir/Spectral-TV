@@ -15,7 +15,6 @@ category: "LiveTV"
 assemblies:
   - "Jellyfin.Plugin.SpectralTV.dll"
   - "CliWrap.dll"
-  - "Microsoft.Bcl.AsyncInterfaces.dll"
   - "Microsoft.Data.Sqlite.dll"
   - "Microsoft.EntityFrameworkCore.Abstractions.dll"
   - "Microsoft.EntityFrameworkCore.dll"
@@ -27,7 +26,6 @@ assemblies:
 artifacts:
   - "Jellyfin.Plugin.SpectralTV.dll"
   - "CliWrap.dll"
-  - "Microsoft.Bcl.AsyncInterfaces.dll"
   - "Microsoft.Data.Sqlite.dll"
   - "Microsoft.EntityFrameworkCore.Abstractions.dll"
   - "Microsoft.EntityFrameworkCore.dll"
