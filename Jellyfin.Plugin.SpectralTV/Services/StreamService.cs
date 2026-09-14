@@ -38,7 +38,6 @@ public class StreamService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SpectralTvDbContext>();
         var catalog = scope.ServiceProvider.GetRequiredService<JellyfinCatalogService>();
-        var weather = scope.ServiceProvider.GetRequiredService<WeatherStarChannelService>();
         var ebs = scope.ServiceProvider.GetRequiredService<EbsService>();
         var youtubeCommercials = scope.ServiceProvider.GetRequiredService<YouTubeCommercialStreamService>();
         var holidays = scope.ServiceProvider.GetRequiredService<HolidayChannelService>();
@@ -49,22 +48,9 @@ public class StreamService
             throw new InvalidOperationException("Channel not found.");
         }
 
-        if (channel.ContentType == ChannelContentType.Weather)
+        if (channel.ContentType is not ChannelContentType.TvShow and not ChannelContentType.Movie)
         {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    await weather.StreamAsync(channel, output, cancellationToken);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.LogError(ex, "Weather stream failed for {Channel}; retrying in 5 seconds", channel.Name);
-                    await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-                }
-            }
-
-            return;
+            throw new InvalidOperationException("This legacy channel type is no longer supported. Spectral TV supports TV Show and Movie channels only.");
         }
 
         var ffmpegPath = _mediaEncoder.EncoderPath;
@@ -76,11 +62,7 @@ public class StreamService
             {
                 try
                 {
-                    if (current.IsVirtual && current.VirtualSource == VirtualContentSource.MusicArtSlide)
-                    {
-                        await StreamMusicItemAsync(channel, current, catalog, ffmpegPath, output, cancellationToken);
-                    }
-                    else if (current.CommercialId.HasValue)
+                    if (current.CommercialId.HasValue)
                     {
                         await StreamCommercialItemAsync(channel, current, catalog, holidays, youtubeCommercials, ffmpegPath, output, cancellationToken);
                     }
@@ -277,33 +259,6 @@ public class StreamService
             Math.Max(1, (item.Finish - DateTime.UtcNow).TotalSeconds),
             output,
             cancellationToken);
-    }
-
-    private async Task StreamMusicItemAsync(
-        Channel channel,
-        PlayoutItem item,
-        JellyfinCatalogService catalog,
-        string ffmpegPath,
-        Stream output,
-        CancellationToken cancellationToken)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var libraryManager = scope.ServiceProvider.GetRequiredService<ILibraryManager>();
-        var mediaItem = libraryManager.GetItemById(item.JellyfinItemId!.Value);
-        if (mediaItem is null)
-        {
-            throw new InvalidOperationException($"Music item {item.JellyfinItemId} not found.");
-        }
-
-        var inputPath = catalog.GetMediaPath(mediaItem);
-        if (string.IsNullOrWhiteSpace(inputPath) || !File.Exists(inputPath))
-        {
-            throw new FileNotFoundException($"Music path missing for {item.Title}.");
-        }
-
-        var albumArt = catalog.GetPrimaryImagePath(mediaItem);
-        var args = _ffmpeg.BuildMusicCommand(channel, inputPath, albumArt);
-        await RunFfmpegToStreamAsync(ffmpegPath, args, output, cancellationToken);
     }
 
     private async Task WriteEbsAsync(
