@@ -94,13 +94,14 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasEmbedde
                 Name = Name,
                 DisplayName = Name,
                 EnableInMainMenu = true,
+                MenuIcon = "live_tv",
                 EmbeddedResourcePath = resourcePrefix + "configPage.html"
             },
             new PluginPageInfo
             {
                 Name = "SpectralTV_Programming",
                 DisplayName = "Spectral TV Programming",
-                EnableInMainMenu = true,
+                EnableInMainMenu = false,
                 EmbeddedResourcePath = resourcePrefix + "programmingPage.html"
             },
             new PluginPageInfo
