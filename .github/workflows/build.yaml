@@ -39,10 +39,10 @@ jobs:
           python-version: '3.x'
 
       - name: Fetch bundled Binarygeek119 logos
-        run: python3 scripts/fetch-binarygeek119-logos.py Jellyfin.Plugin.FinTV/Assets/logos/binarygeek119
+        run: python3 scripts/fetch-binarygeek119-logos.py Jellyfin.Plugin.SpectralTV/Assets/logos/binarygeek119
 
       - name: Restore NuGet packages
-        run: dotnet restore Jellyfin.Plugin.FinTV/Jellyfin.Plugin.FinTV.csproj
+        run: dotnet restore Jellyfin.Plugin.SpectralTV/Jellyfin.Plugin.SpectralTV.csproj
 
       - name: Update build.yaml logo artifacts
         run: python3 scripts/update-build-artifacts.py
@@ -60,7 +60,7 @@ jobs:
           text = re.sub(r'(?m)^owner:\s*.*$', 'owner: "SpecterNoir"', text, count=1)
           text = re.sub(
               r'(?m)^overview:\s*.*$',
-              'overview: "Virtual TV channels with weighted programming, promos, bumpers, and IPTV streaming"',
+              'overview: "Always-on virtual TV channels for Jellyfin with weighted programming, promos, bumpers, and IPTV streaming"',
               text,
               count=1)
           path.write_text(text, encoding='utf-8')
@@ -93,12 +93,12 @@ jobs:
           if gh release view beta >/dev/null 2>&1; then
             gh release upload beta "$artifact" --clobber
             gh release edit beta \
-              --title "Jellyfin-TV Latest Beta" \
-              --notes "Latest installable Jellyfin 12 beta built automatically from feature/weighted-channels. This is the runtime-test build for weighted channels and promo/bumper scheduling." \
+              --title "Spectral TV Latest Beta" \
+              --notes "Latest installable Jellyfin 12 beta of Spectral TV, built automatically from feature/weighted-channels." \
               --prerelease
           else
             gh release create beta "$artifact" \
-              --title "Jellyfin-TV Latest Beta" \
-              --notes "Latest installable Jellyfin 12 beta built automatically from feature/weighted-channels. This is the runtime-test build for weighted channels and promo/bumper scheduling." \
+              --title "Spectral TV Latest Beta" \
+              --notes "Latest installable Jellyfin 12 beta of Spectral TV, built automatically from feature/weighted-channels." \
               --prerelease
           fi
