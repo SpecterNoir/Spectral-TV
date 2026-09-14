@@ -14,6 +14,8 @@ HTML_PATH = CONFIG / "configPage.html"
 JS_PATH = CONFIG / "admin.js"
 STUDIO_HTML_PATH = CONFIG / "channelStudioPage.html"
 STUDIO_JS_PATH = CONFIG / "channelStudio.js"
+CONNECT_HTML_PATH = CONFIG / "liveTvConnectPage.html"
+CONNECT_JS_PATH = CONFIG / "liveTvConnect.js"
 PLUGIN_PATH = ROOT / "Jellyfin.Plugin.SpectralTV" / "Plugin.cs"
 API_PATH = ROOT / "Jellyfin.Plugin.SpectralTV" / "Api"
 
@@ -77,6 +79,8 @@ def main() -> int:
     javascript = JS_PATH.read_text(encoding="utf-8")
     studio_html = STUDIO_HTML_PATH.read_text(encoding="utf-8")
     studio_javascript = STUDIO_JS_PATH.read_text(encoding="utf-8")
+    connect_html = CONNECT_HTML_PATH.read_text(encoding="utf-8")
+    connect_javascript = CONNECT_JS_PATH.read_text(encoding="utf-8")
     plugin = PLUGIN_PATH.read_text(encoding="utf-8")
     errors: list[str] = []
 
@@ -94,6 +98,13 @@ def main() -> int:
         errors,
         ("data-cs-mode", "data-cs-pick", "data-live-remove", "data-od-source-remove", "data-od-filler-remove"),
     )
+    connect_ids, connect_referenced_ids, connect_button_count = audit_page(
+        "Live TV connect",
+        connect_html,
+        connect_javascript,
+        errors,
+        ("data-copy",),
+    )
 
     forbidden = (
         "Binarygeek119",
@@ -107,7 +118,7 @@ def main() -> int:
         ">EBS<",
     )
     for value in forbidden:
-        if value.lower() in html.lower() or value.lower() in studio_html.lower():
+        if value.lower() in html.lower() or value.lower() in studio_html.lower() or value.lower() in connect_html.lower():
             errors.append(f"retired UI concept is visible: {value}")
 
     required_steps = {"channel", "programming", "breaks", "finish"}
@@ -132,6 +143,13 @@ def main() -> int:
     if missing_routes:
         errors.append("admin calls API families without controllers: " + ", ".join(missing_routes))
 
+    setup_controller = (API_PATH / "SetupController.cs").read_text(encoding="utf-8")
+    for route in ('[HttpGet("livetv-status")]', '[HttpPost("livetv")]'):
+        if route not in setup_controller:
+            errors.append(f"Live TV connect UI requires missing setup endpoint: {route}")
+    if "SpectralTV/api/setup/" not in connect_javascript:
+        errors.append("Live TV connect JavaScript is not scoped to the setup API")
+
     retired_controllers = {
         "AiController.cs", "ChannelPresetsController.cs", "CommercialsController.cs",
         "EbsController.cs", "LineupsController.cs", "ListsController.cs",
@@ -145,6 +163,10 @@ def main() -> int:
         errors.append("plugin must expose exactly one dashboard entry")
     if "channelStudioPage.html" not in plugin or "SpectralTV_channelStudio.js" not in plugin:
         errors.append("Channel Studio resources are not registered by the plugin")
+    if "liveTvConnectPage.html" not in plugin or "SpectralTV_livetvConnect.js" not in plugin:
+        errors.append("one-click Live TV connection resources are not registered by the plugin")
+    if "SpectralTV_ConnectLiveTv" not in studio_html:
+        errors.append("Channel Studio does not link to the one-click Live TV connection page")
 
     if errors:
         print("Spectral TV admin UI validation FAILED:")
@@ -159,6 +181,9 @@ def main() -> int:
     print(f"  Studio HTML ids: {len(studio_ids)}")
     print(f"  Studio buttons audited: {studio_button_count}")
     print(f"  Studio JavaScript-bound ids: {len(studio_referenced_ids)}")
+    print(f"  Live TV connect HTML ids: {len(connect_ids)}")
+    print(f"  Live TV connect buttons audited: {connect_button_count}")
+    print(f"  Live TV connect JavaScript-bound ids: {len(connect_referenced_ids)}")
     print(f"  API families checked: {len(all_endpoint_families)}")
     print("  Retired UI concepts: none")
     return 0

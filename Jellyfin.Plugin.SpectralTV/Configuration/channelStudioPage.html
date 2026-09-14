@@ -28,7 +28,7 @@
         #SpectralTVChannelStudioPage .cs-check strong,#SpectralTVChannelStudioPage .cs-check small{display:block}
         #SpectralTVChannelStudioPage .cs-check small{color:var(--cs-muted);margin-top:.12rem}
         #SpectralTVChannelStudioPage .cs-actions{display:flex;gap:.55rem;flex-wrap:wrap;align-items:center;margin-top:.85rem}
-        #SpectralTVChannelStudioPage .cs-button{border:1px solid var(--cs-border);border-radius:10px;padding:.58rem .8rem;background:var(--cs-panel-2);color:inherit;cursor:pointer;font-weight:700}
+        #SpectralTVChannelStudioPage .cs-button{display:inline-block;border:1px solid var(--cs-border);border-radius:10px;padding:.58rem .8rem;background:var(--cs-panel-2);color:inherit;cursor:pointer;font-weight:700;text-decoration:none}
         #SpectralTVChannelStudioPage .cs-button-primary{background:linear-gradient(135deg,var(--cs-red),var(--cs-red-dark));border-color:transparent;color:#fff}
         #SpectralTVChannelStudioPage .cs-button-danger{border-color:rgba(239,68,68,.35);color:#fecaca;background:rgba(127,29,29,.22)}
         #SpectralTVChannelStudioPage .cs-button-small{padding:.4rem .58rem;font-size:.78rem}
@@ -69,7 +69,7 @@
 
         <section id="cs-panel-live" class="cs-panel is-active">
             <div class="cs-card">
-                <div class="cs-card-head"><div><h2>Automatic live rotation</h2><p>Pick a list of shows and let Spectral TV continuously generate the channel. Fixed time slots remain optional in the main Spectral TV page.</p></div></div>
+                <div class="cs-card-head"><div><h2>Automatic live rotation</h2><p>Pick a list of shows and let Spectral TV continuously generate the channel. Show selection stays separate from each show's episode order.</p></div></div>
                 <div class="cs-grid">
                     <label class="cs-field"><span>Live channel</span><select id="cs-live-channel" class="emby-select"></select></label>
                     <label class="cs-field"><span>How should the next show be chosen?</span><select id="cs-live-selection" class="emby-select"><option value="0">Balanced — roughly equal airtime</option><option value="1">Weighted — follow each source's share</option><option value="2">Random — any source can play next</option></select></label>
@@ -87,6 +87,11 @@
                 </div>
                 <p class="cs-note">Example: choose <strong>Random</strong> above, then keep Naruto and Bleach set to <strong>Sequential</strong>. The next show is unpredictable, but each show still advances in story order.</p>
                 <div id="cs-live-sources" class="cs-list"></div>
+            </div>
+
+            <div class="cs-card">
+                <div class="cs-card-head"><div><h2>Jellyfin Live TV connection</h2><p>Register Spectral TV's M3U tuner and XMLTV guide directly with Jellyfin. The connection tool is explicit and never changes unrelated tuners or guide providers.</p></div></div>
+                <div class="cs-actions"><a class="cs-button cs-button-primary" href="#!/configurationpage?name=SpectralTV_ConnectLiveTv">Check / connect Jellyfin Live TV</a><a class="cs-button" href="#!/configurationpage?name=SpectralTV_LiveSetup">Advanced live channel setup</a></div>
             </div>
         </section>
 
@@ -140,7 +145,7 @@
                 <div id="cs-od-preview-list" class="cs-preview"></div>
             </div>
 
-            <p class="cs-note"><strong>Viewer integration is the next layer.</strong> This build creates the on-demand recipe and per-user progress engine first. The eventual Jellyfin viewing surface will use the logged-in Jellyfin user ID automatically; users will not type progress keys.</p>
+            <p class="cs-note"><strong>Viewer integration is active.</strong> Enabled on-demand recipes are materialized as private per-user Jellyfin playlists. Normal Jellyfin playback events update the matching Spectral TV progress only when the session queue belongs to that Spectral playlist.</p>
         </section>
     </div>
 

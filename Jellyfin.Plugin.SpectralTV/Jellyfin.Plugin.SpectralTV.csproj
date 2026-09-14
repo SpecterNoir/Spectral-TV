@@ -41,6 +41,8 @@
     <EmbeddedResource Include="Configuration\admin.js" />
     <EmbeddedResource Include="Configuration\channelStudioPage.html" />
     <EmbeddedResource Include="Configuration\channelStudio.js" />
+    <EmbeddedResource Include="Configuration\liveTvConnectPage.html" />
+    <EmbeddedResource Include="Configuration\liveTvConnect.js" />
   </ItemGroup>
 
 </Project>

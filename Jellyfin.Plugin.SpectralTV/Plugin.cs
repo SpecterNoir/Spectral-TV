@@ -59,7 +59,7 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasEmbedde
                 EmbeddedResourcePath = resourcePrefix + "channelStudio.js"
             },
             // The cleaned original live-channel editor remains available from Channel Studio for
-            // channel creation, logos, detailed break controls, and Jellyfin Live TV connection.
+            // channel creation, logos, detailed break controls, and manual Live TV URLs.
             new PluginPageInfo
             {
                 Name = "SpectralTV_LiveSetup",
@@ -71,6 +71,20 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasEmbedde
             {
                 Name = "SpectralTV_admin.js",
                 EmbeddedResourcePath = resourcePrefix + "admin.js"
+            },
+            // Explicit one-click native Live TV registration. Hidden from the dashboard menu so
+            // Channel Studio remains the plugin's single top-level entry.
+            new PluginPageInfo
+            {
+                Name = "SpectralTV_ConnectLiveTv",
+                DisplayName = "Connect Spectral TV to Jellyfin",
+                EnableInMainMenu = false,
+                EmbeddedResourcePath = resourcePrefix + "liveTvConnectPage.html"
+            },
+            new PluginPageInfo
+            {
+                Name = "SpectralTV_livetvConnect.js",
+                EmbeddedResourcePath = resourcePrefix + "liveTvConnect.js"
             }
         ];
     }
