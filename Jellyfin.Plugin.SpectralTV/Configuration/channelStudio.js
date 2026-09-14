@@ -144,6 +144,84 @@ const SpectralTvChannelStudio = (() => {
 
     // ---- Live automatic rotation ---------------------------------------------------------------
 
+    function nextLiveChannelNumber() {
+        if (!state.liveChannels.length) return 1;
+        return Math.max(...state.liveChannels.map((channel) => Math.ceil(Number(channel.number) || 0))) + 1;
+    }
+
+    function installLiveCreateUi() {
+        const livePanel = byId('cs-panel-live');
+        const firstCard = livePanel?.querySelector('.cs-card');
+        const head = firstCard?.querySelector('.cs-card-head');
+        if (!firstCard || !head || firstCard.querySelector('[data-live-create-panel]')) return;
+
+        const newButton = document.createElement('button');
+        newButton.type = 'button';
+        newButton.className = 'cs-button cs-button-primary cs-button-small';
+        newButton.dataset.liveNew = '1';
+        newButton.textContent = '+ New live channel';
+        head.appendChild(newButton);
+
+        const panel = document.createElement('form');
+        panel.className = 'cs-note cs-hidden';
+        panel.dataset.liveCreatePanel = '1';
+        panel.style.marginTop = '1rem';
+        panel.innerHTML = `
+            <div class="cs-grid cs-grid-3">
+                <label class="cs-field"><span>Channel name</span><input data-live-create-name class="emby-input" type="text" required placeholder="Cartoon Network"></label>
+                <label class="cs-field"><span>Channel number</span><input data-live-create-number class="emby-input" type="number" min="1" step="0.1" required></label>
+                <label class="cs-field"><span>Picture format</span><select data-live-create-aspect class="emby-select"><option value="0">16:9 widescreen</option><option value="1">4:3 classic TV</option></select></label>
+            </div>
+            <div class="cs-actions">
+                <button type="submit" class="cs-button cs-button-primary">Create channel</button>
+                <button type="button" class="cs-button" data-live-create-cancel="1">Cancel</button>
+                <span class="cs-muted">Logo, scanlines, and on-screen bug placement remain available under Advanced live channel setup.</span>
+            </div>`;
+        firstCard.appendChild(panel);
+    }
+
+    function openLiveCreate() {
+        const panel = state.root?.querySelector('[data-live-create-panel]');
+        if (!panel) return;
+        const number = panel.querySelector('[data-live-create-number]');
+        const name = panel.querySelector('[data-live-create-name]');
+        const aspect = panel.querySelector('[data-live-create-aspect]');
+        number.value = String(nextLiveChannelNumber());
+        name.value = '';
+        aspect.value = '0';
+        panel.classList.remove('cs-hidden');
+        window.setTimeout(() => name.focus(), 0);
+    }
+
+    function closeLiveCreate() {
+        state.root?.querySelector('[data-live-create-panel]')?.classList.add('cs-hidden');
+    }
+
+    async function createLiveChannel() {
+        const panel = state.root?.querySelector('[data-live-create-panel]');
+        if (!panel) return;
+        const name = panel.querySelector('[data-live-create-name]').value.trim();
+        const number = Number(panel.querySelector('[data-live-create-number]').value);
+        const aspectRatio = Number(panel.querySelector('[data-live-create-aspect]').value || 0);
+        if (!name) return toast('Enter a channel name.', 'error');
+        if (!Number.isFinite(number) || number < 1) return toast('Enter a valid channel number.', 'error');
+
+        const created = await request('/channels', { method: 'POST', body: {
+            number,
+            name,
+            enabled: true,
+            aspectRatio,
+            scanlinesEnabled: false,
+            bugPlacement: 0,
+            logoSetId: null,
+            logoFileName: null
+        }});
+        closeLiveCreate();
+        await loadLiveChannels(created.id);
+        await loadLiveProgramming();
+        toast(`Live channel “${name}” created. Add shows below, then save automatic mode.`);
+    }
+
     async function loadLiveChannels(preferredId = null) {
         const channels = await request('/channels');
         state.liveChannels = Array.isArray(channels) ? channels : [];
@@ -154,6 +232,7 @@ const SpectralTvChannelStudio = (() => {
             ? state.liveChannels.map((c) => `<option value="${c.id}">${escapeHtml(c.number)} · ${escapeHtml(c.name)}</option>`).join('')
             : '<option value="">No live channels yet</option>';
         select.value = state.liveSelectedId || '';
+        if (!state.liveChannels.length) openLiveCreate();
     }
 
     async function loadLive() {
@@ -172,11 +251,20 @@ const SpectralTvChannelStudio = (() => {
     }
 
     function renderLive() {
+        const hasChannel = !!state.liveSelectedId;
+        ['cs-live-enabled','cs-live-selection','cs-live-save','cs-live-rebuild','cs-live-search','cs-live-weight','cs-live-order'].forEach((id) => {
+            if (byId(id)) byId(id).disabled = !hasChannel;
+        });
+
         const settings = state.liveProgramming?.settings || {};
-        byId('cs-live-enabled').checked = settings.enabled === true;
+        byId('cs-live-enabled').checked = hasChannel && settings.enabled === true;
         byId('cs-live-selection').value = String(settings.selectionMode ?? 1);
         const sources = state.liveProgramming?.sources || [];
         const list = byId('cs-live-sources');
+        if (!hasChannel) {
+            list.innerHTML = '<div class="cs-empty">Create your first live channel above, then add shows or movies here.</div>';
+            return;
+        }
         if (!sources.length) {
             list.innerHTML = '<div class="cs-empty">No automatic programming yet. Search above to add a show or movie.</div>';
             return;
@@ -208,7 +296,7 @@ const SpectralTvChannelStudio = (() => {
     }
 
     async function addLiveSource(itemId) {
-        if (!state.liveSelectedId) return;
+        if (!state.liveSelectedId) return toast('Create or select a live channel first.', 'error');
         await request(`/programming/${state.liveSelectedId}/sources`, { method: 'POST', body: {
             jellyfinItemId: itemId,
             targetAirtimePercent: Number(byId('cs-live-weight').value || 1),
@@ -517,6 +605,10 @@ const SpectralTvChannelStudio = (() => {
         state.root.addEventListener('click', (event) => {
             const modeButton = event.target.closest('[data-cs-mode]');
             if (modeButton) return setMode(modeButton.dataset.csMode);
+            const liveNew = event.target.closest('[data-live-new]');
+            if (liveNew) return openLiveCreate();
+            const liveCancel = event.target.closest('[data-live-create-cancel]');
+            if (liveCancel) return closeLiveCreate();
             const pick = event.target.closest('[data-cs-pick]');
             if (pick) {
                 if (pick.dataset.csPick === 'live') return safely(addLiveSource(pick.dataset.itemId));
@@ -529,6 +621,12 @@ const SpectralTvChannelStudio = (() => {
             if (odRemove) return safely(removeOdSource(odRemove.dataset.odSourceRemove));
             const fillerRemove = event.target.closest('[data-od-filler-remove]');
             if (fillerRemove) return safely(removeOdFiller(fillerRemove.dataset.odFillerRemove));
+        });
+
+        state.root.addEventListener('submit', (event) => {
+            if (!event.target.matches('[data-live-create-panel]')) return;
+            event.preventDefault();
+            safely(createLiveChannel());
         });
 
         state.root.addEventListener('change', (event) => {
@@ -562,6 +660,7 @@ const SpectralTvChannelStudio = (() => {
         if (!state.root || state.root.dataset.spectralStudioBound === '1') return;
         state.root.dataset.spectralStudioBound = '1';
         state.disposed = false;
+        installLiveCreateUi();
         bindEvents();
         await safely(loadLive());
     }
