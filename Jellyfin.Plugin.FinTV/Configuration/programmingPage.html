@@ -24,6 +24,8 @@
         #FinTVProgrammingPage .vtv-total.warn { color:#ffc857; }
         #FinTVProgrammingPage .vtv-status { margin:.75rem 0; padding:.7rem .85rem; border-radius:7px; background:rgba(255,255,255,.06); display:none; }
         #FinTVProgrammingPage .vtv-status.show { display:block; }
+        #FinTVProgrammingPage .vtv-new-channel { display:none; }
+        #FinTVProgrammingPage .vtv-new-channel.show { display:block; }
         #FinTVProgrammingPage .danger { color:#ff8b8b; }
         @media(max-width:700px) {
             #FinTVProgrammingPage .vtv-wrap { padding:.8rem; }
@@ -45,9 +47,25 @@
                 <span>Channel</span>
                 <select id="vtv-channel" class="emby-select"></select>
             </label>
+            <button id="vtv-new-channel-toggle" type="button" class="emby-button">New Channel</button>
             <button id="vtv-refresh" type="button" class="emby-button">Refresh</button>
             <button id="vtv-rebuild" type="button" class="raised button-submit emby-button">Rebuild Channel</button>
         </div>
+
+        <section id="vtv-new-channel-panel" class="vtv-card vtv-new-channel">
+            <h2>Create a channel</h2>
+            <p class="vtv-muted">This creates a normal FinTV Live TV channel and immediately enables the simpler weighted-programming mode.</p>
+            <div class="vtv-grid">
+                <label><span>Name</span><input id="vtv-new-channel-name" type="text" class="emby-input" placeholder="Cartoon Network"></label>
+                <label><span>Channel number</span><input id="vtv-new-channel-number" type="number" min="1" step="1" class="emby-input" value="101"></label>
+                <label><span>Aspect ratio</span><select id="vtv-new-channel-aspect" class="emby-select"><option value="0">16:9</option><option value="1">4:3</option></select></label>
+            </div>
+            <div class="vtv-actions">
+                <button id="vtv-create-channel" type="button" class="raised button-submit emby-button">Create Channel</button>
+                <button id="vtv-cancel-new-channel" type="button" class="emby-button">Cancel</button>
+            </div>
+        </section>
+
         <div id="vtv-status" class="vtv-status"></div>
 
         <section class="vtv-card">
@@ -62,7 +80,10 @@
                 <label><span>Maximum filler time (seconds)</span><input id="vtv-filler-max-seconds" type="number" min="0" max="3600" class="emby-input" value="180"></label>
                 <label><span>Filler repeat cooldown (items)</span><input id="vtv-filler-repeat" type="number" min="0" max="100" class="emby-input" value="12"></label>
             </div>
-            <div class="vtv-actions"><button id="vtv-save-settings" type="button" class="raised button-submit emby-button">Save Channel Behavior</button></div>
+            <div class="vtv-actions">
+                <button id="vtv-save-settings" type="button" class="raised button-submit emby-button">Save Channel Behavior</button>
+                <button id="vtv-delete-channel" type="button" class="emby-button danger">Delete Channel</button>
+            </div>
         </section>
 
         <section class="vtv-card">
