@@ -42,6 +42,9 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: Prepare Jellyfin-native admin authorization
+        run: python3 scripts/prepare-admin-auth.py
+
       - name: Validate admin UI contracts
         run: python3 scripts/validate-admin-ui.py
 
