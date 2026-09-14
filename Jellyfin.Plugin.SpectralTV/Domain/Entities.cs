@@ -66,13 +66,19 @@ public class Channel
 }
 
 /// <summary>
-/// Per-channel settings for the continuous weighted programming engine.
+/// Per-channel settings for the continuous automatic programming engine.
 /// </summary>
 public class ChannelProgrammingSettings
 {
     public Guid ChannelId { get; set; }
 
     public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Controls whether automatic live programming balances all sources, follows configured weights,
+    /// or chooses the next show randomly. Episode order is configured independently per source.
+    /// </summary>
+    public LiveSelectionMode SelectionMode { get; set; } = LiveSelectionMode.Weighted;
 
     public bool FillerEnabled { get; set; } = true;
 
