@@ -65,6 +65,68 @@ public class Channel
     public ICollection<PlayoutHistoryEntry> History { get; set; } = new List<PlayoutHistoryEntry>();
 }
 
+/// <summary>
+/// Per-channel settings for the continuous weighted programming engine.
+/// </summary>
+public class ChannelProgrammingSettings
+{
+    public Guid ChannelId { get; set; }
+
+    public bool Enabled { get; set; }
+
+    public bool FillerEnabled { get; set; } = true;
+
+    public int FillerChancePercent { get; set; } = 100;
+
+    public int MinFillerItems { get; set; } = 1;
+
+    public int MaxFillerItems { get; set; } = 2;
+
+    public int MaxFillerSeconds { get; set; } = 180;
+
+    public int FillerRepeatWindow { get; set; } = 12;
+}
+
+/// <summary>
+/// A weighted programming source. A Jellyfin item can be a series, season, episode, or movie.
+/// </summary>
+public class ChannelProgramSource
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid ChannelId { get; set; }
+
+    public Guid JellyfinItemId { get; set; }
+
+    public double TargetAirtimePercent { get; set; } = 100;
+
+    public ProgramPlaybackMode PlaybackMode { get; set; } = ProgramPlaybackMode.Sequential;
+
+    public bool Enabled { get; set; } = true;
+
+    public int SortOrder { get; set; }
+}
+
+/// <summary>
+/// A promo, bumper, commercial, or station ID kept separate from programming percentages.
+/// </summary>
+public class ChannelFillerSource
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public Guid ChannelId { get; set; }
+
+    public Guid JellyfinItemId { get; set; }
+
+    public FillerContentKind Kind { get; set; } = FillerContentKind.Promo;
+
+    public int Weight { get; set; } = 1;
+
+    public bool Enabled { get; set; } = true;
+
+    public int SortOrder { get; set; }
+}
+
 public class LogoSet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -185,6 +247,8 @@ public class PlayoutItem
 
     public Guid? CommercialId { get; set; }
 
+    public Guid? ProgramSourceId { get; set; }
+
     public Guid? JellyfinItemId { get; set; }
 
     public DateTime Start { get; set; }
@@ -214,6 +278,8 @@ public class PlayoutHistoryEntry
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public Guid ChannelId { get; set; }
+
+    public Guid? ProgramSourceId { get; set; }
 
     public Guid? JellyfinItemId { get; set; }
 
