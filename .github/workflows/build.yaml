@@ -93,7 +93,7 @@ jobs:
           if gh release view beta >/dev/null 2>&1; then
             gh release view beta --json assets --jq '.assets[].name' | while read -r asset_name; do
               case "$asset_name" in
-                fintv_*.zip|spectraltv_*.zip|spectral_tv_*.zip)
+                *.zip)
                   gh release delete-asset beta "$asset_name" -y
                   ;;
               esac
