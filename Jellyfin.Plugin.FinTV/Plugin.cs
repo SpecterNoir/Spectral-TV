@@ -98,6 +98,13 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasEmbedde
             },
             new PluginPageInfo
             {
+                Name = "FinTV_Programming",
+                DisplayName = "FinTV Programming",
+                EnableInMainMenu = true,
+                EmbeddedResourcePath = resourcePrefix + "programmingPage.html"
+            },
+            new PluginPageInfo
+            {
                 Name = "FinTV_admin.css",
                 EmbeddedResourcePath = resourcePrefix + "admin.css"
             },
@@ -105,6 +112,11 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasEmbedde
             {
                 Name = "FinTV_admin.js",
                 EmbeddedResourcePath = resourcePrefix + "admin.js"
+            },
+            new PluginPageInfo
+            {
+                Name = "FinTV_programming.js",
+                EmbeddedResourcePath = resourcePrefix + "programming.js"
             }
         ];
     }
