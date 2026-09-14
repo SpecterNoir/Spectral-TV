@@ -30,7 +30,31 @@ public enum FillerKind
     None = 0,
     PreRoll = 1,
     MidRoll = 2,
-    PostRoll = 3
+    PostRoll = 3,
+    Promo = 4,
+    Bumper = 5,
+    Commercial = 6,
+    StationId = 7
+}
+
+/// <summary>
+/// How a weighted programming source advances through its contents.
+/// </summary>
+public enum ProgramPlaybackMode
+{
+    Sequential = 0,
+    Random = 1
+}
+
+/// <summary>
+/// The editorial role of an item in a channel's separate filler pool.
+/// </summary>
+public enum FillerContentKind
+{
+    Promo = 0,
+    Bumper = 1,
+    Commercial = 2,
+    StationId = 3
 }
 
 public enum LineupOverrideKind
