@@ -16,7 +16,7 @@ namespace Jellyfin.Plugin.SpectralTV.Services;
 public sealed class OnDemandPlaylistMaterializer : BackgroundService
 {
     private static readonly TimeSpan InitialDelay = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan DiscoveryInterval = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan DiscoveryInterval = TimeSpan.FromMinutes(1);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OnDemandPlaylistMaterializer> _logger;
