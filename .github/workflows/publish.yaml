@@ -122,8 +122,8 @@ jobs:
           TAG_NAME: ${{ steps.release.outputs.tag }}
         run: |
           git stash push -m "publish-build-artifacts" -- build.yaml 2>/dev/null || git checkout -- build.yaml
-          git fetch origin master
-          git checkout master
+          git fetch origin main
+          git checkout main
           zipfile="${{ steps.build.outputs.zipfile }}"
           zipname=$(basename "$zipfile")
           plugin_url="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/${zipname}"
@@ -132,4 +132,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add manifest.json
           git diff --cached --quiet || git commit -m "Update manifest for ${TAG_NAME}"
-          git push origin master
+          git push origin main
