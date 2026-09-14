@@ -142,7 +142,11 @@ public class OnDemandProgress
     /// <summary>Index into alternating, block, fixed, or custom rotation cycles.</summary>
     public int PatternIndex { get; set; }
 
+    /// <summary>The source that supplied the most recently completed main program.</summary>
     public Guid? LastSourceId { get; set; }
+
+    /// <summary>The source that supplied CurrentItemId.</summary>
+    public Guid? CurrentSourceId { get; set; }
 
     /// <summary>Per-source next episode indexes.</summary>
     public string SourceCursorJson { get; set; } = "{}";
@@ -156,10 +160,10 @@ public class OnDemandProgress
     /// <summary>Recent filler ids used for no-repeat behavior.</summary>
     public string RecentFillerJson { get; set; } = "[]";
 
-    /// <summary>Currently active main Jellyfin item, reserved for client resume integration.</summary>
+    /// <summary>Currently active main Jellyfin item.</summary>
     public Guid? CurrentItemId { get; set; }
 
-    /// <summary>Playback position within CurrentItemId, reserved for client resume integration.</summary>
+    /// <summary>Playback position within CurrentItemId. The future client surface can mirror Jellyfin resume here.</summary>
     public long CurrentPositionTicks { get; set; }
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
