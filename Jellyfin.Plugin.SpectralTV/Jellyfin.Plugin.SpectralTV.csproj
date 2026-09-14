@@ -31,6 +31,8 @@
     <EmbeddedResource Include="..\logo.png" Link="logo.png" LogicalName="Jellyfin.Plugin.SpectralTV.logo.png" />
     <EmbeddedResource Include="Configuration\configPage.html" />
     <EmbeddedResource Include="Configuration\admin.js" />
+    <EmbeddedResource Include="Configuration\channelStudioPage.html" />
+    <EmbeddedResource Include="Configuration\channelStudio.js" />
   </ItemGroup>
 
 </Project>
