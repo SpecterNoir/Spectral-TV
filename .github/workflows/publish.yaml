@@ -1,0 +1,135 @@
+name: '🚀 Publish Plugin'
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v0.0.2.45)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: release
+        env:
+          INPUT_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          tag="${INPUT_TAG}"
+          if [ -z "$tag" ]; then
+            echo "Release tag is required." >&2
+            exit 1
+          fi
+          if [[ ! "$tag" =~ ^v ]]; then
+            tag="v${tag}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install JPRM
+        run: python -m pip install --upgrade jprm
+
+      - name: Fetch bundled Binarygeek119 logos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/fetch-binarygeek119-logos.py Jellyfin.Plugin.FinTV/Assets/logos/binarygeek119
+
+      - name: Restore NuGet packages
+        run: dotnet restore Jellyfin.Plugin.FinTV/Jellyfin.Plugin.FinTV.csproj
+
+      - name: Update build.yaml logo artifacts
+        run: python3 scripts/update-build-artifacts.py
+
+      - name: Build plugin zip
+        id: build
+        run: |
+          tag="${{ steps.release.outputs.tag }}"
+          version="${tag#v}"
+          mkdir -p ./artifacts
+          zipfile=$(jprm --verbosity=debug plugin build . --version "$version" --output ./artifacts --dotnet-configuration Release --dotnet-framework net10.0)
+          echo "zipfile=$zipfile" >> "$GITHUB_OUTPUT"
+          echo "Built artifact: $zipfile"
+
+      - name: Whitelist managed assemblies in plugin zip
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import shutil
+          import zipfile
+
+          import yaml
+
+          zip_path = os.environ["ZIPFILE"]
+          with open("build.yaml", encoding="utf-8") as fh:
+              build_cfg = yaml.safe_load(fh)
+
+          assemblies = build_cfg.get("assemblies")
+          if not assemblies:
+              raise SystemExit("build.yaml must define assemblies")
+
+          IMAGE_RESOURCE = "Jellyfin.Plugin.FinTV.logo.png"
+
+          tmp_path = f"{zip_path}.tmp"
+          with zipfile.ZipFile(zip_path, "r") as zin, zipfile.ZipFile(tmp_path, "w") as zout:
+              for item in zin.infolist():
+                  if item.filename == "logo.png":
+                      continue
+
+                  data = zin.read(item.filename)
+                  if item.filename == "meta.json":
+                      meta = json.loads(data)
+                      meta["assemblies"] = assemblies
+                      meta["imageResourceName"] = IMAGE_RESOURCE
+                      meta["imagePath"] = ""
+                      data = json.dumps(meta, indent=4, sort_keys=True).encode("utf-8")
+                  zout.writestr(item, data)
+
+          shutil.move(tmp_path, zip_path)
+          PY
+        env:
+          ZIPFILE: ${{ steps.build.outputs.zipfile }}
+
+      - name: Attach zip to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          files: ${{ steps.build.outputs.zipfile }}
+
+      - name: Update manifest.json
+        env:
+          TAG_NAME: ${{ steps.release.outputs.tag }}
+        run: |
+          git stash push -m "publish-build-artifacts" -- build.yaml 2>/dev/null || git checkout -- build.yaml
+          git fetch origin master
+          git checkout master
+          zipfile="${{ steps.build.outputs.zipfile }}"
+          zipname=$(basename "$zipfile")
+          plugin_url="https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/${zipname}"
+          jprm repo add --plugin-url "$plugin_url" ./manifest.json "$zipfile"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git diff --cached --quiet || git commit -m "Update manifest for ${TAG_NAME}"
+          git push origin master
