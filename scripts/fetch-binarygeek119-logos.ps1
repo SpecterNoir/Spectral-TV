@@ -1,11 +1,11 @@
 param(
-    [string]$OutputDir = (Join-Path $PSScriptRoot "..\Jellyfin.Plugin.FinTV\Assets\logos\binarygeek119")
+    [string]$OutputDir = (Join-Path $PSScriptRoot "..\Jellyfin.Plugin.SpectralTV\Assets\logos\binarygeek119")
 )
 
 $ErrorActionPreference = "Stop"
 
 $Repo = "binarygeek119/open-channel-logos"
-$GitRef = "fintv2"
+$GitRef = "spectraltv2"
 $TreeUrl = "https://api.github.com/repos/$Repo/git/trees/$GitRef`?recursive=1"
 $RawBase = "https://raw.githubusercontent.com/$Repo/$GitRef/"
 $LogoPrefixes = @(
@@ -22,7 +22,7 @@ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
 $headers = @{
     Accept       = "application/vnd.github+json"
-    "User-Agent" = "FinTV-Jellyfin-Plugin"
+    "User-Agent" = "SpectralTV-Jellyfin-Plugin"
 }
 
 $tree = Invoke-RestMethod -Uri $TreeUrl -Headers $headers
@@ -36,7 +36,7 @@ $files = $tree.tree | Where-Object {
 Write-Host "Bundling $($files.Count) logos from ${Repo}@${GitRef} into $OutputDir"
 
 $client = New-Object System.Net.WebClient
-$client.Headers.Add("User-Agent", "FinTV-Jellyfin-Plugin")
+$client.Headers.Add("User-Agent", "SpectralTV-Jellyfin-Plugin")
 
 foreach ($file in $files) {
     $relative = $file.path

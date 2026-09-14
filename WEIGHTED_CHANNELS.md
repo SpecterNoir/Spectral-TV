@@ -1,6 +1,6 @@
 # Weighted Virtual Channels
 
-This branch adds a simpler continuous-programming mode to the recovered FinTV Jellyfin 12 plugin. It is intended for channels that should feel like television rather than a manually populated 48-slot schedule.
+This branch adds a simpler continuous-programming mode to the recovered SpectralTV Jellyfin 12 plugin. It is intended for channels that should feel like television rather than a manually populated 48-slot schedule.
 
 ## Programming pool
 
@@ -33,7 +33,7 @@ Filler plays in the live stream between programs, but XMLTV folds it into the pr
 
 ## Jellyfin integration
 
-Weighted mode still uses the recovered FinTV Live TV infrastructure:
+Weighted mode still uses the recovered SpectralTV Live TV infrastructure:
 
 - M3U channel feed
 - XMLTV guide
@@ -41,8 +41,8 @@ Weighted mode still uses the recovered FinTV Live TV infrastructure:
 - mid-program tune-in based on current wall-clock time
 - Jellyfin Live TV playback on clients such as Web, desktop, Android/Fire TV, and Roku
 
-The new **FinTV Programming** dashboard page provides channel creation, programming/filler search, percentages, playback order, and playout rebuild controls.
+The new **SpectralTV Programming** dashboard page provides channel creation, programming/filler search, percentages, playback order, and playout rebuild controls.
 
 ## Compatibility
 
-Weighted mode is opt-in per channel. Existing legacy FinTV lineups continue to use the original 48-slot scheduler until weighted programming is enabled for that channel.
+Weighted mode is opt-in per channel. Existing legacy SpectralTV lineups continue to use the original 48-slot scheduler until weighted programming is enabled for that channel.

@@ -7,8 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_YAML = ROOT / "build.yaml"
-LOGOS_DIR = ROOT / "Jellyfin.Plugin.FinTV" / "Assets" / "logos" / "binarygeek119"
-SCRIPTS_DIR = ROOT / "Jellyfin.Plugin.FinTV" / "Assets" / "scripts"
+LOGOS_DIR = ROOT / "Jellyfin.Plugin.SpectralTV" / "Assets" / "logos" / "binarygeek119"
+SCRIPTS_DIR = ROOT / "Jellyfin.Plugin.SpectralTV" / "Assets" / "scripts"
 
 
 def logo_artifacts() -> list[str]:
