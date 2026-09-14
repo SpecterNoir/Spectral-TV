@@ -47,6 +47,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddScoped<SpecialPresentationService>();
         serviceCollection.AddScoped<FinTvListService>();
         serviceCollection.AddScoped<SmartSelectionService>();
+        serviceCollection.AddScoped<WeightedProgrammingService>();
         serviceCollection.AddScoped<LineupGeneratorService>();
         serviceCollection.AddScoped<CommercialService>();
         serviceCollection.AddScoped<CommercialBrainzClient>();
