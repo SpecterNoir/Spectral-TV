@@ -75,6 +75,19 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages, IHasEmbedde
             {
                 Name = "SpectralTV_admin.js",
                 EmbeddedResourcePath = resourcePrefix + "admin.js"
+            },
+            new PluginPageInfo
+            {
+                Name = "SpectralTV_Studio",
+                DisplayName = "Spectral TV Studio",
+                EnableInMainMenu = true,
+                MenuIcon = "playlist_play",
+                EmbeddedResourcePath = resourcePrefix + "channelStudioPage.html"
+            },
+            new PluginPageInfo
+            {
+                Name = "SpectralTV_channelStudio.js",
+                EmbeddedResourcePath = resourcePrefix + "channelStudio.js"
             }
         ];
     }
