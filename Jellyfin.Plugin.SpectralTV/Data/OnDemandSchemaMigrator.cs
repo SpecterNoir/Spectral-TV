@@ -86,6 +86,7 @@ internal static class OnDemandSchemaMigrator
                 "ProgressKey" TEXT NOT NULL,
                 "PatternIndex" INTEGER NOT NULL DEFAULT 0,
                 "LastSourceId" TEXT NULL,
+                "CurrentSourceId" TEXT NULL,
                 "SourceCursorJson" TEXT NOT NULL DEFAULT '{}',
                 "SourcePickCountJson" TEXT NOT NULL DEFAULT '{}',
                 "ShuffleBagJson" TEXT NOT NULL DEFAULT '[]',
@@ -98,12 +99,13 @@ internal static class OnDemandSchemaMigrator
             """,
             cancellationToken);
 
+        await AddColumnIfMissingAsync(db, "OnDemandProgress", "CurrentSourceId", "TEXT NULL", cancellationToken);
+
         await db.Database.ExecuteSqlRawAsync(
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_OnDemandProgress_ChannelId_ProgressKey\" ON \"OnDemandProgress\" (\"ChannelId\", \"ProgressKey\");",
             cancellationToken);
 
-        // Existing weighted-programming installs need this column; fresh installs get the same column
-        // through WeightedProgrammingSchemaMigrator below. Keeping the operation idempotent protects upgrades.
+        // Existing weighted-programming installs need this column. Keeping the operation idempotent protects upgrades.
         await AddColumnIfMissingAsync(db, "ChannelProgrammingSettings", "SelectionMode", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
     }
 
