@@ -9,12 +9,12 @@
     "imageUrl": "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png",
     "versions": [
       {
-        "version": "0.0.3.97",
+        "version": "0.0.3.99",
         "changelog": "- Add Channel Studio for automatic Live TV and resumable on-demand smart channels\n- Add one-click explicit registration of Spectral TV's M3U tuner and XMLTV guide with Jellyfin Live TV without touching unrelated tuner/provider entries\n- Add balanced, weighted, and random live source selection while preserving independent sequential or random episode order\n- Add alternating, block, balanced-random, weighted-random, random, shuffle-cycle, fixed-sequence, and custom-pattern on-demand programming\n- Add separate promo, bumper, commercial, and station-ID pools that do not corrupt episode progress\n- Materialize enabled on-demand channels as private per-user Jellyfin playlists so normal clients can play them without a custom client\n- Track authenticated per-user progress and safely advance smart playlists only when Jellyfin playback belongs to the linked Spectral TV queue\n- Preserve Jellyfin user visibility rules, resume positions, patched dependency auditing, Linux/Synology package sanitization, and startup safety checks",
         "targetAbi": "12.0.0.0",
-        "sourceUrl": "https://github.com/SpecterNoir/Spectral-TV/releases/download/beta/spectral-tv_0.0.3.97.zip",
-        "checksum": "c05f59941436563c5044097f98cbe522",
-        "timestamp": "2026-09-14T16:47:58Z"
+        "sourceUrl": "https://github.com/SpecterNoir/Spectral-TV/releases/download/beta/spectral-tv_0.0.3.99.zip",
+        "checksum": "91a19825c18d0091b930c1735de10022",
+        "timestamp": "2026-09-14T16:55:12Z"
       }
     ]
   }
