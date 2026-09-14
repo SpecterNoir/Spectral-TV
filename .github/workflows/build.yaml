@@ -80,18 +80,28 @@ jobs:
         with:
           dotnet-target: net10.0
 
-      - name: Strip Windows native SQLite DLLs from beta package
-        if: github.event_name != 'pull_request'
+      - name: Sanitize Linux/Synology plugin package
         run: |
           set -euo pipefail
           artifact="${{ steps.jprm.outputs.artifact }}"
           artifact_abs=$(realpath "$artifact")
           tmpdir=$(mktemp -d)
           unzip -q "$artifact_abs" -d "$tmpdir"
-          find "$tmpdir/runtimes" -type f -path '*/win-*/native/*.dll' -delete 2>/dev/null || true
+
+          # Jellyfin recursively inspects DLLs under plugin folders. Native Windows DLLs
+          # must never reach a Linux/Synology install. macOS runtimes are unnecessary here.
+          rm -rf "$tmpdir"/runtimes/win-* "$tmpdir"/runtimes/osx-* 2>/dev/null || true
+          find "$tmpdir" -type d -empty -delete 2>/dev/null || true
+
           rm -f "$artifact_abs"
           (cd "$tmpdir" && zip -qr "$artifact_abs" .)
           rm -rf "$tmpdir"
+
+      - name: Validate plugin package safety
+        run: python3 scripts/validate-plugin-package.py "${{ steps.jprm.outputs.artifact }}"
+
+      - name: Smoke test Spectral TV inside Jellyfin 12 Linux
+        run: bash scripts/smoke-test-jellyfin-linux.sh "${{ steps.jprm.outputs.artifact }}"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -131,12 +141,12 @@ jobs:
             gh release upload beta "$artifact"
             gh release edit beta \
               --title "Spectral TV Latest Beta" \
-              --notes "Latest installable Jellyfin 12 beta of Spectral TV, built automatically from main." \
+              --notes "Latest installable Jellyfin 12 Linux/Synology beta of Spectral TV. Every published build passes package validation and a Jellyfin 12 Linux startup smoke test before release." \
               --prerelease
           else
             gh release create beta "$artifact" \
               --title "Spectral TV Latest Beta" \
-              --notes "Latest installable Jellyfin 12 beta of Spectral TV, built automatically from main." \
+              --notes "Latest installable Jellyfin 12 Linux/Synology beta of Spectral TV. Every published build passes package validation and a Jellyfin 12 Linux startup smoke test before release." \
               --prerelease
           fi
 
@@ -161,7 +171,7 @@ jobs:
               "imageUrl": "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png",
               "versions": [{
                   "version": version,
-                  "changelog": "Development beta for Jellyfin 12. Fixes Synology/Linux loading by excluding Windows native SQLite DLLs from the plugin package, plus weighted programming, filler pools, persistent playout, M3U/XMLTV Live TV integration, and dashboard controls.",
+                  "changelog": "Development beta for Jellyfin 12 Linux/Synology with startup isolation, package safety validation, and automated Jellyfin startup smoke testing, plus weighted programming, filler pools, persistent playout, M3U/XMLTV Live TV integration, and dashboard controls.",
                   "targetAbi": "12.0.0.0",
                   "sourceUrl": f"https://github.com/{repo}/releases/download/beta/{zipname}",
                   "checksum": checksum,
