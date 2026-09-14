@@ -30,7 +30,12 @@ internal static class WeightedProgrammingSchemaMigrator
             """,
             cancellationToken);
 
-        await AddColumnIfMissingAsync(db, "ChannelProgrammingSettings", "SelectionMode", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
+        await SqliteSchemaHelper.AddColumnIfMissingAsync(
+            db,
+            "ChannelProgrammingSettings",
+            "SelectionMode",
+            "INTEGER NOT NULL DEFAULT 1",
+            cancellationToken);
 
         await db.Database.ExecuteSqlRawAsync(
             """
@@ -76,37 +81,24 @@ internal static class WeightedProgrammingSchemaMigrator
             """,
             cancellationToken);
 
-        await AddColumnIfMissingAsync(db, "PlayoutItems", "ProgramSourceId", "TEXT", cancellationToken);
-        await AddColumnIfMissingAsync(db, "PlayoutHistory", "ProgramSourceId", "TEXT", cancellationToken);
+        await SqliteSchemaHelper.AddColumnIfMissingAsync(
+            db,
+            "PlayoutItems",
+            "ProgramSourceId",
+            "TEXT",
+            cancellationToken);
+        await SqliteSchemaHelper.AddColumnIfMissingAsync(
+            db,
+            "PlayoutHistory",
+            "ProgramSourceId",
+            "TEXT",
+            cancellationToken);
 
         await db.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS \"IX_PlayoutItems_ProgramSourceId\" ON \"PlayoutItems\" (\"ProgramSourceId\");",
             cancellationToken);
         await db.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS \"IX_PlayoutHistory_ProgramSourceId\" ON \"PlayoutHistory\" (\"ProgramSourceId\");",
-            cancellationToken);
-    }
-
-    private static async Task AddColumnIfMissingAsync(
-        SpectralTvDbContext db,
-        string table,
-        string column,
-        string definition,
-        CancellationToken cancellationToken)
-    {
-        var escapedTable = table.Replace("\"", "\"\"");
-        var escapedColumn = column.Replace("'", "''");
-        var count = await db.Database
-            .SqlQueryRaw<long>($"SELECT COUNT(*) AS \"Value\" FROM pragma_table_info(\"{escapedTable}\") WHERE name = '{escapedColumn}'")
-            .FirstAsync(cancellationToken);
-
-        if (count > 0)
-        {
-            return;
-        }
-
-        await db.Database.ExecuteSqlRawAsync(
-            $"ALTER TABLE \"{escapedTable}\" ADD COLUMN \"{column}\" {definition};",
             cancellationToken);
     }
 }

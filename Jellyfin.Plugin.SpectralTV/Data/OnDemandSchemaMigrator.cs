@@ -99,7 +99,12 @@ internal static class OnDemandSchemaMigrator
             """,
             cancellationToken);
 
-        await AddColumnIfMissingAsync(db, "OnDemandProgress", "CurrentSourceId", "TEXT NULL", cancellationToken);
+        await SqliteSchemaHelper.AddColumnIfMissingAsync(
+            db,
+            "OnDemandProgress",
+            "CurrentSourceId",
+            "TEXT NULL",
+            cancellationToken);
 
         await db.Database.ExecuteSqlRawAsync(
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_OnDemandProgress_ChannelId_ProgressKey\" ON \"OnDemandProgress\" (\"ChannelId\", \"ProgressKey\");",
@@ -127,29 +132,11 @@ internal static class OnDemandSchemaMigrator
             cancellationToken);
 
         // Existing weighted-programming installs need this column. Keeping the operation idempotent protects upgrades.
-        await AddColumnIfMissingAsync(db, "ChannelProgrammingSettings", "SelectionMode", "INTEGER NOT NULL DEFAULT 1", cancellationToken);
-    }
-
-    private static async Task AddColumnIfMissingAsync(
-        SpectralTvDbContext db,
-        string table,
-        string column,
-        string definition,
-        CancellationToken cancellationToken)
-    {
-        var escapedTable = table.Replace("\"", "\"\"");
-        var escapedColumn = column.Replace("'", "''");
-        var count = await db.Database
-            .SqlQueryRaw<long>($"SELECT COUNT(*) AS \"Value\" FROM pragma_table_info(\"{escapedTable}\") WHERE name = '{escapedColumn}'")
-            .FirstAsync(cancellationToken);
-
-        if (count > 0)
-        {
-            return;
-        }
-
-        await db.Database.ExecuteSqlRawAsync(
-            $"ALTER TABLE \"{escapedTable}\" ADD COLUMN \"{column}\" {definition};",
+        await SqliteSchemaHelper.AddColumnIfMissingAsync(
+            db,
+            "ChannelProgrammingSettings",
+            "SelectionMode",
+            "INTEGER NOT NULL DEFAULT 1",
             cancellationToken);
     }
 }
