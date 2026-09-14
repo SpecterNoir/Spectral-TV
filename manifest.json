@@ -9,12 +9,12 @@
     "imageUrl": "https://raw.githubusercontent.com/SpecterNoir/Spectral-TV/main/logo.png",
     "versions": [
       {
-        "version": "0.0.3.41",
-        "changelog": "Development beta for Jellyfin 12: weighted programming, separate filler pools, persistent playout, M3U/XMLTV Live TV integration, and Spectral TV dashboard controls.",
+        "version": "0.0.3.42",
+        "changelog": "Development beta for Jellyfin 12. Fixes Synology/Linux loading by excluding Windows native SQLite DLLs from the plugin package, plus weighted programming, filler pools, persistent playout, M3U/XMLTV Live TV integration, and dashboard controls.",
         "targetAbi": "12.0.0.0",
-        "sourceUrl": "https://github.com/SpecterNoir/Spectral-TV/releases/download/beta/spectral-tv_0.0.3.41.zip",
-        "checksum": "fcf4f71fa0cb182e4c3b30f3275a7e14",
-        "timestamp": "2026-09-14T06:58:25Z"
+        "sourceUrl": "https://github.com/SpecterNoir/Spectral-TV/releases/download/beta/spectral-tv_0.0.3.42.zip",
+        "checksum": "f2d10c29fc6c679c7d157eb050f54599",
+        "timestamp": "2026-09-14T07:35:40Z"
       }
     ]
   }
