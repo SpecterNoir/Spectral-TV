@@ -73,11 +73,18 @@ internal static partial class SqliteSchemaHelper
         try
         {
             await using var command = connection.CreateCommand();
-            command.CommandText = $"SELECT COUNT(*) FROM pragma_table_info(\"{table}\") WHERE name = $column;";
-            var parameter = command.CreateParameter();
-            parameter.ParameterName = "$column";
-            parameter.Value = column;
-            command.Parameters.Add(parameter);
+            command.CommandText = "SELECT COUNT(*) FROM pragma_table_info($table) WHERE name = $column;";
+
+            var tableParameter = command.CreateParameter();
+            tableParameter.ParameterName = "$table";
+            tableParameter.Value = table;
+            command.Parameters.Add(tableParameter);
+
+            var columnParameter = command.CreateParameter();
+            columnParameter.ParameterName = "$column";
+            columnParameter.Value = column;
+            command.Parameters.Add(columnParameter);
+
             var scalar = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
             return Convert.ToInt64(scalar, System.Globalization.CultureInfo.InvariantCulture) > 0;
         }
