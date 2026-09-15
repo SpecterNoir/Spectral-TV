@@ -78,6 +78,10 @@ internal static class OnDemandSchemaMigrator
             "CREATE INDEX IF NOT EXISTS \"IX_OnDemandFillerSources_ChannelId_SortOrder\" ON \"OnDemandFillerSources\" (\"ChannelId\", \"SortOrder\");",
             cancellationToken);
 
+        // ExecuteSqlRawAsync formats raw SQL through composite formatting. Literal JSON object braces
+        // therefore must be doubled here so SQLite receives '{}' instead of EF treating the braces as
+        // format placeholders. The previous unescaped defaults threw FormatException during startup,
+        // preventing this table (and therefore every on-demand write) from being created on real installs.
         await db.Database.ExecuteSqlRawAsync(
             """
             CREATE TABLE IF NOT EXISTS "OnDemandProgress" (
@@ -87,8 +91,8 @@ internal static class OnDemandSchemaMigrator
                 "PatternIndex" INTEGER NOT NULL DEFAULT 0,
                 "LastSourceId" TEXT NULL,
                 "CurrentSourceId" TEXT NULL,
-                "SourceCursorJson" TEXT NOT NULL DEFAULT '{}',
-                "SourcePickCountJson" TEXT NOT NULL DEFAULT '{}',
+                "SourceCursorJson" TEXT NOT NULL DEFAULT '{{}}',
+                "SourcePickCountJson" TEXT NOT NULL DEFAULT '{{}}',
                 "ShuffleBagJson" TEXT NOT NULL DEFAULT '[]',
                 "RecentFillerJson" TEXT NOT NULL DEFAULT '[]',
                 "CurrentItemId" TEXT NULL,
