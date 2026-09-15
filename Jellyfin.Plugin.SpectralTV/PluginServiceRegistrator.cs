@@ -45,6 +45,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddHostedService<DatabaseInitializer>();
         serviceCollection.AddHostedService<OnDemandPlaybackObserver>();
         serviceCollection.AddHostedService<OnDemandPlaylistMaterializer>();
+        serviceCollection.AddHostedService<HomeScreenSectionRegistrar>();
     }
 
     private static void ConfigureJsonOptions(IServiceCollection serviceCollection)
