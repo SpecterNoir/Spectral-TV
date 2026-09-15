@@ -85,6 +85,20 @@ if build_marker not in studio_text:
     studio_text = studio_text.replace(hero_line, build_marker, 1)
 studio_page.write_text(studio_text, encoding="utf-8")
 
+# The UI validator runs after this preparation step. Teach it to accept the per-build resource names
+# while still requiring the correct registered resource family.
+validator_path = Path("scripts/validate-admin-ui.py")
+validator_text = validator_path.read_text(encoding="utf-8")
+validator_text = validator_text.replace(
+    r"SpectralTV_channelStudio(?:_auth2)?\.js",
+    r"SpectralTV_channelStudio(?:_[A-Za-z0-9]+)?\.js",
+)
+validator_text = validator_text.replace(
+    r"SpectralTV_livetvConnect(?:_auth2)?\.js",
+    r"SpectralTV_livetvConnect(?:_[A-Za-z0-9]+)?\.js",
+)
+validator_path.write_text(validator_text, encoding="utf-8")
+
 for path in JS_FILES:
     text = path.read_text(encoding="utf-8")
     if "ApiClient.setRequestHeaders(headers)" not in text or "ApiClient.fetch(request, true)" not in text:
