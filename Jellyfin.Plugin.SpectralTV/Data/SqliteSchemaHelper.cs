@@ -17,6 +17,79 @@ internal static partial class SqliteSchemaHelper
         "TEXT NULL"
     };
 
+    public static async Task<bool> TableExistsAsync(
+        SpectralTvDbContext db,
+        string table,
+        CancellationToken cancellationToken)
+    {
+        ValidateIdentifier(table, nameof(table));
+        var connection = db.Database.GetDbConnection();
+        var openedHere = connection.State != ConnectionState.Open;
+        if (openedHere)
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $table;";
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "$table";
+            parameter.Value = table;
+            command.Parameters.Add(parameter);
+            var scalar = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            return Convert.ToInt64(scalar, System.Globalization.CultureInfo.InvariantCulture) > 0;
+        }
+        finally
+        {
+            if (openedHere)
+            {
+                await connection.CloseAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    public static async Task<bool> ColumnExistsAsync(
+        SpectralTvDbContext db,
+        string table,
+        string column,
+        CancellationToken cancellationToken)
+    {
+        ValidateIdentifier(table, nameof(table));
+        ValidateIdentifier(column, nameof(column));
+        if (!await TableExistsAsync(db, table, cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        var connection = db.Database.GetDbConnection();
+        var openedHere = connection.State != ConnectionState.Open;
+        if (openedHere)
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT COUNT(*) FROM pragma_table_info(\"{table}\") WHERE name = $column;";
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "$column";
+            parameter.Value = column;
+            command.Parameters.Add(parameter);
+            var scalar = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            return Convert.ToInt64(scalar, System.Globalization.CultureInfo.InvariantCulture) > 0;
+        }
+        finally
+        {
+            if (openedHere)
+            {
+                await connection.CloseAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
     public static async Task AddColumnIfMissingAsync(
         SpectralTvDbContext db,
         string table,
@@ -31,6 +104,19 @@ internal static partial class SqliteSchemaHelper
             throw new ArgumentException("Unsupported SQLite column definition.", nameof(definition));
         }
 
+        // A very old or partially recovered database can be missing an optional base table entirely.
+        // An additive migration must not abort every later schema family just because there is nothing
+        // to alter yet. The owning base feature can recreate that table independently.
+        if (!await TableExistsAsync(db, table, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        if (await ColumnExistsAsync(db, table, column, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
         var connection = db.Database.GetDbConnection();
         var openedHere = connection.State != ConnectionState.Open;
         if (openedHere)
@@ -40,19 +126,6 @@ internal static partial class SqliteSchemaHelper
 
         try
         {
-            await using var existsCommand = connection.CreateCommand();
-            existsCommand.CommandText = $"SELECT COUNT(*) FROM pragma_table_info(\"{table}\") WHERE name = $column;";
-            var columnParameter = existsCommand.CreateParameter();
-            columnParameter.ParameterName = "$column";
-            columnParameter.Value = column;
-            existsCommand.Parameters.Add(columnParameter);
-
-            var scalar = await existsCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-            if (Convert.ToInt64(scalar, System.Globalization.CultureInfo.InvariantCulture) > 0)
-            {
-                return;
-            }
-
             await using var alterCommand = connection.CreateCommand();
             alterCommand.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {definition};";
             await alterCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
