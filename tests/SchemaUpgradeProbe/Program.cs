@@ -94,9 +94,9 @@ static async Task AssertTableAsync(SpectralTvDbContext db, string table)
 
 static async Task AssertColumnAsync(SpectralTvDbContext db, string table, string column)
 {
-    var safeTable = table.Replace("\"", "\"\"");
     var count = await db.Database.SqlQueryRaw<long>(
-        $"SELECT COUNT(*) AS \"Value\" FROM pragma_table_info(\"{safeTable}\") WHERE name = {{0}}",
+        "SELECT COUNT(*) AS \"Value\" FROM pragma_table_info({0}) WHERE name = {1}",
+        table,
         column).FirstAsync();
     if (count != 1)
     {
