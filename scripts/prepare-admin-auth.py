@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os
+import re
 from pathlib import Path
 
 JS_FILES = [
@@ -26,13 +28,17 @@ for path in JS_FILES:
         text = text.replace(old_fetch, new_fetch, 1)
     path.write_text(text, encoding="utf-8")
 
-# Jellyfin web can retain plugin controller modules across plugin upgrades because the
-# resource URL is unchanged. Give this auth fix fresh resource names so an installed
-# 0.0.3.108 controller cannot remain in the browser module cache after updating.
+# Jellyfin Web caches plugin pages/modules aggressively. Reusing the same embedded-resource
+# name across releases caused 0.0.3.116 to display the older 0.0.3.111 Channel Studio even
+# after the server plugin was updated. Every CI build now gets a unique page and module name.
+raw_build = os.environ.get("GITHUB_RUN_NUMBER", "dev")
+build_id = re.sub(r"[^A-Za-z0-9]", "", raw_build) or "dev"
+suffix = f"run{build_id}"
+page_name = f"SpectralTV_ChannelStudio_{suffix}"
 controller_names = {
-    "SpectralTV_channelStudio.js": "SpectralTV_channelStudio_auth2.js",
-    "SpectralTV_admin.js": "SpectralTV_admin_auth2.js",
-    "SpectralTV_livetvConnect.js": "SpectralTV_livetvConnect_auth2.js",
+    "SpectralTV_channelStudio.js": f"SpectralTV_channelStudio_{suffix}.js",
+    "SpectralTV_admin.js": f"SpectralTV_admin_{suffix}.js",
+    "SpectralTV_livetvConnect.js": f"SpectralTV_livetvConnect_{suffix}.js",
 }
 
 plugin_path = Path("Jellyfin.Plugin.SpectralTV/Plugin.cs")
@@ -42,21 +48,21 @@ for old, new in controller_names.items():
 
 plugin_text = plugin_text.replace(
     "Name = Name,\n                DisplayName = Name,\n                EnableInMainMenu = true,",
-    "Name = \"SpectralTV_ChannelStudio_auth2\",\n                DisplayName = Name,\n                EnableInMainMenu = true,",
+    f"Name = \"{page_name}\",\n                DisplayName = Name,\n                EnableInMainMenu = true,",
     1,
 )
 plugin_path.write_text(plugin_text, encoding="utf-8")
 
 page_replacements = {
     Path("Jellyfin.Plugin.SpectralTV/Configuration/channelStudioPage.html"): [
-        ("__plugin/SpectralTV_channelStudio.js", "__plugin/SpectralTV_channelStudio_auth2.js"),
+        ("__plugin/SpectralTV_channelStudio.js", f"__plugin/{controller_names['SpectralTV_channelStudio.js']}"),
     ],
     Path("Jellyfin.Plugin.SpectralTV/Configuration/configPage.html"): [
-        ("__plugin/SpectralTV_admin.js", "__plugin/SpectralTV_admin_auth2.js"),
+        ("__plugin/SpectralTV_admin.js", f"__plugin/{controller_names['SpectralTV_admin.js']}"),
     ],
     Path("Jellyfin.Plugin.SpectralTV/Configuration/liveTvConnectPage.html"): [
-        ("__plugin/SpectralTV_livetvConnect.js", "__plugin/SpectralTV_livetvConnect_auth2.js"),
-        ("#!/configurationpage?name=Spectral%20TV", "#!/configurationpage?name=SpectralTV_ChannelStudio_auth2"),
+        ("__plugin/SpectralTV_livetvConnect.js", f"__plugin/{controller_names['SpectralTV_livetvConnect.js']}"),
+        ("#!/configurationpage?name=Spectral%20TV", f"#!/configurationpage?name={page_name}"),
     ],
 }
 for path, replacements in page_replacements.items():
@@ -66,6 +72,18 @@ for path, replacements in page_replacements.items():
             raise SystemExit(f"Could not find expected controller/page reference {old!r} in {path}")
         text = text.replace(old, new)
     path.write_text(text, encoding="utf-8")
+
+# Put an unmistakable build marker in Channel Studio. This makes a stale Jellyfin Web cache
+# visible immediately in screenshots/videos instead of making us guess which UI code is running.
+studio_page = Path("Jellyfin.Plugin.SpectralTV/Configuration/channelStudioPage.html")
+studio_text = studio_page.read_text(encoding="utf-8")
+hero_line = '<p class="cs-muted">Build channels around content rules instead of manually filling every time slot.</p>'
+build_marker = hero_line + f'\n            <p class="cs-muted" style="margin-bottom:0;font-size:.78rem">Loaded UI build {build_id}</p>'
+if build_marker not in studio_text:
+    if hero_line not in studio_text:
+        raise SystemExit("Could not locate Channel Studio hero for build marker")
+    studio_text = studio_text.replace(hero_line, build_marker, 1)
+studio_page.write_text(studio_text, encoding="utf-8")
 
 for path in JS_FILES:
     text = path.read_text(encoding="utf-8")
@@ -77,8 +95,8 @@ for path in JS_FILES:
 plugin_text = plugin_path.read_text(encoding="utf-8")
 for new in controller_names.values():
     if f'Name = "{new}"' not in plugin_text:
-        raise SystemExit(f"Fresh controller resource name {new} was not registered")
-if 'Name = "SpectralTV_ChannelStudio_auth2"' not in plugin_text:
-    raise SystemExit("Fresh Channel Studio page route was not registered")
+        raise SystemExit(f"Versioned controller resource name {new} was not registered")
+if f'Name = "{page_name}"' not in plugin_text:
+    raise SystemExit("Versioned Channel Studio page route was not registered")
 
-print("Prepared Jellyfin-native authorization, authenticated transport, and fresh admin resource URLs.")
+print(f"Prepared Jellyfin-native authorization and cache-busted admin resources for build {build_id}.")
