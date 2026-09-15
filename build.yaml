@@ -45,6 +45,11 @@ artifacts:
   - "runtimes/linux-musl-arm64/native/libe_sqlite3.so"
   - "runtimes/linux-musl-arm/native/libe_sqlite3.so"
 changelog: |-
+  - Repair partial/legacy Spectral TV databases without destructive channel-table rewrites, and isolate schema families so one old migration cannot block automatic or on-demand channels
+  - Add a release-gating legacy-schema upgrade probe in addition to the clean Jellyfin 12 Linux smoke test
+  - Make Channel Studio backend failures identify the failing method, route, and HTTP status instead of every problem appearing as a generic request error
+  - Simplify Channel Studio search results for dynamic channels, fixed sequences, and promo clips, and keep search results from covering the rest of the page
+  - Remove internal on-demand progress test controls from the normal interface while retaining non-destructive sequence preview
   - Add Channel Studio for automatic Live TV and resumable on-demand smart channels
   - Add one-click explicit registration of Spectral TV's M3U tuner and XMLTV guide with Jellyfin Live TV without touching unrelated tuner/provider entries
   - Add balanced, weighted, and random live source selection while preserving independent sequential or random episode order
