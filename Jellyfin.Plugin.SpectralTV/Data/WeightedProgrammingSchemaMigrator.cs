@@ -81,24 +81,41 @@ internal static class WeightedProgrammingSchemaMigrator
             """,
             cancellationToken);
 
-        await SqliteSchemaHelper.AddColumnIfMissingAsync(
-            db,
-            "PlayoutItems",
-            "ProgramSourceId",
-            "TEXT",
-            cancellationToken);
-        await SqliteSchemaHelper.AddColumnIfMissingAsync(
-            db,
-            "PlayoutHistory",
-            "ProgramSourceId",
-            "TEXT",
-            cancellationToken);
+        // Playout tables belong to the recovered base schema. Very old/partially recovered databases can
+        // be missing one of them. Repair the additive column/index only when the owning table exists so a
+        // legacy base-table problem cannot block the automatic-programming or on-demand schema families.
+        if (await SqliteSchemaHelper.TableExistsAsync(db, "PlayoutItems", cancellationToken))
+        {
+            await SqliteSchemaHelper.AddColumnIfMissingAsync(
+                db,
+                "PlayoutItems",
+                "ProgramSourceId",
+                "TEXT",
+                cancellationToken);
+            await db.Database.ExecuteSqlRawAsync(
+                "CREATE INDEX IF NOT EXISTS \"IX_PlayoutItems_ProgramSourceId\" ON \"PlayoutItems\" (\"ProgramSourceId\");",
+                cancellationToken);
+        }
+        else
+        {
+            logger.LogWarning("Legacy PlayoutItems table is missing; skipping its optional automatic-programming index repair.");
+        }
 
-        await db.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS \"IX_PlayoutItems_ProgramSourceId\" ON \"PlayoutItems\" (\"ProgramSourceId\");",
-            cancellationToken);
-        await db.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS \"IX_PlayoutHistory_ProgramSourceId\" ON \"PlayoutHistory\" (\"ProgramSourceId\");",
-            cancellationToken);
+        if (await SqliteSchemaHelper.TableExistsAsync(db, "PlayoutHistory", cancellationToken))
+        {
+            await SqliteSchemaHelper.AddColumnIfMissingAsync(
+                db,
+                "PlayoutHistory",
+                "ProgramSourceId",
+                "TEXT",
+                cancellationToken);
+            await db.Database.ExecuteSqlRawAsync(
+                "CREATE INDEX IF NOT EXISTS \"IX_PlayoutHistory_ProgramSourceId\" ON \"PlayoutHistory\" (\"ProgramSourceId\");",
+                cancellationToken);
+        }
+        else
+        {
+            logger.LogWarning("Legacy PlayoutHistory table is missing; skipping its optional automatic-programming index repair.");
+        }
     }
 }
