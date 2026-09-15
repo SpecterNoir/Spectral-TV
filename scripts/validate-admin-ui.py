@@ -185,12 +185,25 @@ def main() -> int:
 
     if plugin.count("EnableInMainMenu = true") != 1:
         errors.append("plugin must expose exactly one dashboard entry")
-    if "channelStudioPage.html" not in plugin or "SpectralTV_channelStudio.js" not in plugin:
+    if "channelStudioPage.html" not in plugin or not re.search(r'SpectralTV_channelStudio(?:_auth2)?\.js', plugin):
         errors.append("Channel Studio resources are not registered by the plugin")
-    if "liveTvConnectPage.html" not in plugin or "SpectralTV_livetvConnect.js" not in plugin:
+    if "liveTvConnectPage.html" not in plugin or not re.search(r'SpectralTV_livetvConnect(?:_auth2)?\.js', plugin):
         errors.append("one-click Live TV connection resources are not registered by the plugin")
     if "SpectralTV_ConnectLiveTv" not in studio_html:
         errors.append("Channel Studio does not link to the one-click Live TV connection page")
+
+    # Jellyfin 12 requires the full MediaBrowser authorization identity. The prepared
+    # package must use Jellyfin's own authenticated transport, not a direct window.fetch
+    # call that can silently lose the active dashboard session.
+    for label, script in (
+        ("main admin", javascript),
+        ("Channel Studio", studio_javascript),
+        ("Live TV connect", connect_javascript),
+    ):
+        if "ApiClient.fetch(request, true)" not in script:
+            errors.append(f"{label}: does not use Jellyfin's authenticated ApiClient transport")
+        if "const response = await fetch(resolveUrl(" in script:
+            errors.append(f"{label}: still contains the direct unauthenticated Spectral request transport")
 
     if errors:
         print("Spectral TV admin UI validation FAILED:")
@@ -210,6 +223,7 @@ def main() -> int:
     print(f"  Live TV connect buttons audited: {connect_button_count}")
     print(f"  Live TV connect JavaScript-bound ids: {len(connect_referenced_ids)}")
     print(f"  API families checked: {len(all_endpoint_families)}")
+    print("  Authenticated admin transport: enforced")
     print("  Retired UI concepts: none")
     return 0
 
