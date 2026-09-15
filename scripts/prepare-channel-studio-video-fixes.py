@@ -21,6 +21,16 @@ new_preview = """            <div class=\"cs-card\">\n                <div class
 if old_preview not in html and new_preview not in html:
     raise SystemExit("Could not locate Channel Studio sequence-preview controls")
 html = html.replace(old_preview, new_preview, 1)
+
+# Surface database health directly in Channel Studio. Opening the page will re-run only idempotent,
+# additive repairs and then report whether the real upgraded database is connectable and writable.
+health_anchor = """        </header>\n\n        <div class=\"cs-mode-tabs\" role=\"tablist\">"""
+health_markup = """        </header>\n\n        <div id=\"cs-health\" class=\"cs-note cs-hidden\" role=\"status\" aria-live=\"polite\"></div>\n\n        <div class=\"cs-mode-tabs\" role=\"tablist\">"""
+if health_markup not in html:
+    if health_anchor not in html:
+        raise SystemExit("Could not locate Channel Studio header for database health panel")
+    html = html.replace(health_anchor, health_markup, 1)
+
 HTML_PATH.write_text(html, encoding="utf-8")
 
 # Make request errors actionable. Jellyfin's production exception page can legitimately return only
@@ -31,6 +41,39 @@ new_throw = "            throw new Error(`${method} ${String(path).replace(/^\\/
 if old_throw not in js and new_throw not in js:
     raise SystemExit("Could not locate Channel Studio request error handling")
 js = js.replace(old_throw, new_throw, 1)
+
+# Ask the server to verify/repair the exact database this Jellyfin instance is using. This is
+# deliberately separate from CI's synthetic database so upgraded Synology installs can self-report
+# missing tables, read-only files, or a specific failed migration instead of a generic HTTP 500.
+health_function = """
+    async function repairDatabase() {
+        const result = await request('/diagnostics/repair', { method: 'POST' });
+        const el = byId('cs-health');
+        if (!el) return result;
+        const status = result?.status || {};
+        const issues = Array.isArray(status.issues) ? status.issues : [];
+        const repairs = Array.isArray(result?.repairs) ? result.repairs : [];
+        const failedRepairs = repairs.filter((step) => step.success === false);
+        el.classList.remove('cs-hidden');
+        if (result?.healthy === true) {
+            el.style.borderColor = 'rgba(74,222,128,.55)';
+            el.textContent = 'Database check passed — Spectral TV can read and write its channel database.';
+        } else {
+            el.style.borderColor = 'rgba(239,68,68,.65)';
+            const details = [
+                ...issues,
+                ...failedRepairs.map((step) => `${step.name}: ${step.error || 'repair failed'}`)
+            ];
+            el.textContent = `Database repair still has a problem: ${details.join(' • ') || 'unknown database error'}`;
+        }
+        return result;
+    }
+"""
+if "async function repairDatabase()" not in js:
+    safely_end = """    async function safely(work) {\n        try { return await work; } catch (error) { toast(error?.message || 'Something went wrong.', 'error'); return null; }\n    }\n"""
+    if safely_end not in js:
+        raise SystemExit("Could not locate Channel Studio safety helper for database diagnostics")
+    js = js.replace(safely_end, safely_end + health_function, 1)
 
 # Channel Studio now asks the catalog for only useful item classes. Dynamic sources are whole shows,
 # seasons, or movies; fixed sequences are exact episodes/movies; promos are individual playable clips.
@@ -92,6 +135,14 @@ if addition not in js:
         raise SystemExit("Could not locate on-demand search binding")
     js = js.replace(needle, addition, 1)
 
+# Run the real-server database check before loading any channel data. Even if it reports a failure,
+# safely() keeps Channel Studio open so catalog search and unrelated diagnostics remain usable.
+old_init = """        installLiveCreateUi();\n        bindEvents();\n        await safely(loadLive());"""
+new_init = """        installLiveCreateUi();\n        bindEvents();\n        await safely(repairDatabase());\n        await safely(loadLive());"""
+if old_init not in js and new_init not in js:
+    raise SystemExit("Could not locate Channel Studio initialization sequence")
+js = js.replace(old_init, new_init, 1)
+
 JS_PATH.write_text(js, encoding="utf-8")
 
 # Final build-time assertions for the exact regressions visible in the user's walkthrough.
@@ -104,5 +155,7 @@ if "purpose=${encodeURIComponent(catalogPurpose)}" not in js:
     raise SystemExit("Purpose-specific Channel Studio search was not installed")
 if "failed (HTTP ${response.status})" not in js:
     raise SystemExit("Actionable Channel Studio request errors were not installed")
+if "request('/diagnostics/repair'" not in js or 'id="cs-health"' not in html:
+    raise SystemExit("Real-server database diagnostics were not installed in Channel Studio")
 
-print("Prepared Channel Studio fixes from the end-to-end video review.")
+print("Prepared Channel Studio fixes, fresh diagnostics, and self-repair from the end-to-end video review.")
