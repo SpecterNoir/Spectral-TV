@@ -31,7 +31,7 @@ public class CatalogController : ControllerBase
     }
 
     /// <summary>
-    /// Searches Jellyfin library items for lineup and weighted-channel assignment.
+    /// Searches Jellyfin library items for channel programming and interstitial assignment.
     /// </summary>
     [HttpGet("search")]
     public ActionResult<IEnumerable<object>> Search(
@@ -47,15 +47,25 @@ public class CatalogController : ControllerBase
             return Ok(Array.Empty<object>());
         }
 
+        var itemTypes = purpose.Trim().ToLowerInvariant() switch
+        {
+            // Dynamic channels advance a source over time, so individual episodes are noise here.
+            "dynamic" => new[] { BaseItemKind.Series, BaseItemKind.Season, BaseItemKind.Movie },
+            // Fixed sequence means the user is choosing the exact playable item order.
+            "fixed" => new[] { BaseItemKind.Episode, BaseItemKind.Movie },
+            // Promos/bumpers must be individual playable videos.
+            "filler" => new[] { BaseItemKind.Episode, BaseItemKind.Movie, BaseItemKind.Video },
+            // Compatibility for the older detailed programming page, which still supports every source type.
+            _ => new[] { BaseItemKind.Series, BaseItemKind.Season, BaseItemKind.Episode, BaseItemKind.Movie }
+        };
+
         var query = new InternalItemsQuery
         {
             Recursive = true,
             IsVirtualItem = false,
             SearchTerm = q.Trim(),
             Limit = Math.Clamp(limit, 1, 50),
-            IncludeItemTypes = purpose.Equals("filler", StringComparison.OrdinalIgnoreCase)
-                ? new[] { BaseItemKind.Episode, BaseItemKind.Movie, BaseItemKind.Video }
-                : new[] { BaseItemKind.Series, BaseItemKind.Season, BaseItemKind.Episode, BaseItemKind.Movie },
+            IncludeItemTypes = itemTypes,
             OrderBy = new[] { (ItemSortBy.SortName, Jellyfin.Database.Implementations.Enums.SortOrder.Ascending) }
         };
 
@@ -104,7 +114,6 @@ public class CatalogController : ControllerBase
             year = item.ProductionYear
         };
     }
-
 }
 
 /// <summary>

@@ -45,11 +45,17 @@ jobs:
       - name: Prepare Jellyfin-native admin authorization
         run: python3 scripts/prepare-admin-auth.py
 
+      - name: Prepare Channel Studio end-to-end fixes
+        run: python3 scripts/prepare-channel-studio-video-fixes.py
+
       - name: Validate admin UI contracts
         run: python3 scripts/validate-admin-ui.py
 
       - name: Restore NuGet packages
         run: dotnet restore Jellyfin.Plugin.SpectralTV/Jellyfin.Plugin.SpectralTV.csproj
+
+      - name: Test upgrade from partial legacy Spectral database
+        run: dotnet run --project tests/SchemaUpgradeProbe/SchemaUpgradeProbe.csproj --configuration Release
 
       - name: Mark development build
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/weighted-channels'
@@ -147,12 +153,12 @@ jobs:
             gh release upload beta "$artifact"
             gh release edit beta \
               --title "Spectral TV Latest Beta" \
-              --notes "Latest installable Jellyfin 12 Linux/Synology beta of Spectral TV. Every published build passes package validation and a Jellyfin 12 Linux startup smoke test before release." \
+              --notes "Latest installable Jellyfin 12 Linux/Synology beta of Spectral TV. Every published build passes package validation, a partial-legacy-schema upgrade probe, and a Jellyfin 12 Linux startup smoke test before release." \
               --prerelease
           else
             gh release create beta "$artifact" \
               --title "Spectral TV Latest Beta" \
-              --notes "Latest installable Jellyfin 12 Linux/Synology beta of Spectral TV. Every published build passes package validation and a Jellyfin 12 Linux startup smoke test before release." \
+              --notes "Latest installable Jellyfin 12 Linux/Synology beta of Spectral TV. Every published build passes package validation, a partial-legacy-schema upgrade probe, and a Jellyfin 12 Linux startup smoke test before release." \
               --prerelease
           fi
 
