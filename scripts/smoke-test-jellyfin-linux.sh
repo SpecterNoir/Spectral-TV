@@ -171,6 +171,48 @@ if [[ -z "$access_token" ]]; then
 fi
 auth_header="$auth_identity, Token=\"$access_token\""
 
+# Round-trip the Channels row through Jellyfin's native homesection preferences. This
+# catches display-preference client/key mismatches that a controller-only startup test
+# cannot see and guarantees the compatibility endpoint writes what the browser reads.
+home_section_set="$workdir/home-section-set.json"
+home_section_set_code=$(curl -sS -o "$home_section_set" -w '%{http_code}' --max-time 8 \
+  -X POST "$base_url/SpectralTV/api/viewer/home-section" \
+  -H "Authorization: $auth_header" \
+  -H 'Content-Type: application/json' \
+  --data '{"sectionIndex":3}' || true)
+if [[ "$home_section_set_code" != "204" ]]; then
+  fail_with_logs "Could not save the Spectral TV Channels Home slot (HTTP $home_section_set_code)." "$home_section_set"
+fi
+
+home_section_get="$workdir/home-section-get.json"
+home_section_get_code=$(curl -sS -o "$home_section_get" -w '%{http_code}' --max-time 8 \
+  "$base_url/SpectralTV/api/viewer/home-section" \
+  -H "Authorization: $auth_header" || true)
+if [[ "$home_section_get_code" != "200" ]]; then
+  fail_with_logs "Could not reload the Spectral TV Channels Home slot (HTTP $home_section_get_code)." "$home_section_get"
+fi
+if [[ "$(json_field "$home_section_get" "sectionIndex")" != "3" ]]; then
+  fail_with_logs "The Spectral TV Channels Home slot did not survive a native Jellyfin preference round trip." "$home_section_get"
+fi
+
+home_section_clear="$workdir/home-section-clear.json"
+home_section_clear_code=$(curl -sS -o "$home_section_clear" -w '%{http_code}' --max-time 8 \
+  -X POST "$base_url/SpectralTV/api/viewer/home-section" \
+  -H "Authorization: $auth_header" \
+  -H 'Content-Type: application/json' \
+  --data '{"sectionIndex":null}' || true)
+if [[ "$home_section_clear_code" != "204" ]]; then
+  fail_with_logs "Could not clear the Spectral TV Channels Home slot (HTTP $home_section_clear_code)." "$home_section_clear"
+fi
+home_section_cleared="$workdir/home-section-cleared.json"
+home_section_cleared_code=$(curl -sS -o "$home_section_cleared" -w '%{http_code}' --max-time 8 \
+  "$base_url/SpectralTV/api/viewer/home-section" \
+  -H "Authorization: $auth_header" || true)
+if [[ "$home_section_cleared_code" != "200" \
+   || -n "$(json_field "$home_section_cleared" "sectionIndex")" ]]; then
+  fail_with_logs "The Spectral TV Channels Home slot was still selected after clearing it." "$home_section_cleared"
+fi
+
 # Force generated URLs to an address reachable from inside the Jellyfin container. This
 # is only CI configuration and never touches a user's server.
 settings_body="$workdir/setup-settings.json"

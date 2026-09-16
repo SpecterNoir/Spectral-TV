@@ -10,6 +10,8 @@ Spectral TV is a native Jellyfin 12 plugin for building always-on virtual televi
 - Separate promo, bumper, commercial, and station-ID pools
 - Shared wall-clock schedules with M3U and XMLTV Live TV integration
 - Tune-in mid-program from normal Jellyfin clients
+- Resumable per-user on-demand smart channels backed by private Jellyfin playlists
+- A per-user Channels row selectable from Jellyfin's normal Home screen settings
 - One guided Jellyfin dashboard workspace for the complete channel workflow
 
 ## Admin workflow
