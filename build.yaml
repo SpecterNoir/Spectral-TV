@@ -12,9 +12,10 @@ description: >
   shows, seasons, episodes, and movies. Choose balanced, weighted, random, block, alternating,
   shuffle, fixed-sequence, or custom-pattern programming; keep each show's episode progress
   independent; insert optional promos and bumpers; use ordinary Jellyfin clients through
-  native Live TV and private per-user playlists; optionally expose on-demand channels as a
-  Channels row through Home Screen Sections; and connect the Spectral M3U/XMLTV sources to
-  Jellyfin Live TV from an explicit one-click admin workflow.
+  native Live TV and private per-user playlists; expose on-demand channels as a Channels row
+  that can be placed from Jellyfin's normal Home screen section settings when JavaScript Injector
+  is available; and connect the Spectral M3U/XMLTV sources to Jellyfin Live TV from an explicit
+  one-click admin workflow.
 category: "LiveTV"
 assemblies:
   - "Jellyfin.Plugin.SpectralTV.dll"
@@ -46,8 +47,11 @@ artifacts:
   - "runtimes/linux-musl-arm64/native/libe_sqlite3.so"
   - "runtimes/linux-musl-arm/native/libe_sqlite3.so"
 changelog: |-
-  - Register enabled on-demand channels as a Home Screen Sections row named Channels, using each viewer's private smart playlist as the native Jellyfin card while keeping the channel name visible
-  - Keep Home Screen Sections optional and isolated so its absence or startup timing can never block Jellyfin or core Spectral TV playback
+  - Add Channels to Jellyfin's normal per-user Home screen section dropdowns through the installed JavaScript Injector plugin, instead of requiring a separate Home Screen Sections settings surface
+  - Store each viewer's Channels slot separately in Jellyfin display preferences so Spectral does not write an unsupported custom value into Jellyfin 12's fixed HomeSectionType enum
+  - Render the selected Channels slot on the ordinary Jellyfin home page and refresh the viewer's private smart playlist when a channel card is opened
+  - Keep JavaScript Injector and Home Screen Sections integrations optional and isolated so either plugin can be absent without blocking Jellyfin startup or core Spectral TV playback
+  - Register enabled on-demand channels as a Home Screen Sections row named Channels as an additional modular-home compatibility path
   - Repair partial/legacy Spectral TV databases without destructive channel-table rewrites, and isolate schema families so one old migration cannot block automatic or on-demand channels
   - Add a release-gating legacy-schema upgrade probe in addition to the clean Jellyfin 12 Linux smoke test
   - Make Channel Studio backend failures identify the failing method, route, and HTTP status instead of every problem appearing as a generic request error
