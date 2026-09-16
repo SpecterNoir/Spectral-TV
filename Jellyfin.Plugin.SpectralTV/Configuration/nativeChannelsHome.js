@@ -6,14 +6,18 @@
     const SECTION_VALUE = 'spectraltvchannels';
     const SECTION_LABEL = 'Channels';
     const SETTINGS_ENDPOINT = 'SpectralTV/api/viewer/home-section';
-    const CHANNELS_ENDPOINT = 'SpectralTV/api/viewer/on-demand';
+    const CHANNELS_ENDPOINT = 'SpectralTV/api/viewer/channels';
     const SELECT_PREFIX = 'selectHomeSection';
     const MAX_SECTIONS = 10;
+    const RENDER_CACHE_MS = 10000;
 
     const bridge = window.__spectralTvChannelsHomeBridge = {
         loaded: true,
         settingsPatched: false,
         homeRendered: false,
+        spectralChannelCount: 0,
+        nativeChannelCount: 0,
+        matchedChannelCount: 0,
         lastError: null
     };
     document.documentElement.dataset.spectralTvChannelsHomeBridge = 'loaded';
@@ -23,6 +27,7 @@
     let settingsRevision = 0;
     let renderGeneration = 0;
     let scheduled = false;
+    let lastRenderAt = 0;
 
     function apiClient() {
         return window.ApiClient || null;
@@ -123,6 +128,7 @@
 
         selectedIndex = selectedIndexFrom(selects);
         settingsLoadedForUser = currentUserId();
+        lastRenderAt = 0;
     }
 
     function bindHomeSettings(selects) {
@@ -138,11 +144,10 @@
         if (form && form.dataset.spectralTvBound !== '1') {
             form.dataset.spectralTvBound = '1';
             form.addEventListener('submit', function () {
-                // Jellyfin 12 persists the custom value in its native homesection preference.
-                // Keep the real value in the select so Jellyfin's own asynchronous save reads it.
                 settingsRevision++;
                 selectedIndex = selectedIndexFrom(getHomeSelects());
                 settingsLoadedForUser = currentUserId();
+                lastRenderAt = 0;
             }, true);
         }
     }
@@ -194,18 +199,113 @@
             .replace(/'/g, '&#039;');
     }
 
+    function read(obj, pascal, camel) {
+        if (!obj) return null;
+        if (obj[pascal] !== undefined && obj[pascal] !== null) return obj[pascal];
+        if (obj[camel] !== undefined && obj[camel] !== null) return obj[camel];
+        return null;
+    }
+
+    function normalize(value) {
+        return String(value == null ? '' : value).trim().toLowerCase();
+    }
+
+    function normalizeNumber(value) {
+        return String(value == null ? '' : value).trim().replace(/^0+/, '');
+    }
+
+    async function loadNativeLiveTvChannels() {
+        const userId = currentUserId();
+        if (!userId) return [];
+
+        try {
+            const result = await apiJson('LiveTv/Channels', {
+                query: {
+                    UserId: userId,
+                    AddCurrentProgram: true,
+                    EnableImages: true,
+                    EnableUserData: true,
+                    EnableTotalRecordCount: false
+                }
+            });
+            const items = read(result, 'Items', 'items');
+            return Array.isArray(items) ? items : [];
+        } catch (error) {
+            console.debug('[Spectral TV] Jellyfin native Live TV channels are not available yet.', error);
+            return [];
+        }
+    }
+
+    function findNativeChannel(spectral, nativeChannels) {
+        const spectralName = normalize(spectral.name);
+        const spectralNumber = normalizeNumber(spectral.number);
+
+        let match = nativeChannels.find(function (candidate) {
+            return normalize(read(candidate, 'Name', 'name')) === spectralName
+                && normalizeNumber(read(candidate, 'ChannelNumber', 'channelNumber')) === spectralNumber;
+        });
+        if (match) return match;
+
+        match = nativeChannels.find(function (candidate) {
+            return normalize(read(candidate, 'Name', 'name')) === spectralName;
+        });
+        if (match) return match;
+
+        if (spectralNumber) {
+            match = nativeChannels.find(function (candidate) {
+                return normalizeNumber(read(candidate, 'ChannelNumber', 'channelNumber')) === spectralNumber;
+            });
+        }
+        return match || null;
+    }
+
+    function resolveImageUrl(channel, nativeChannel) {
+        const nativeId = read(nativeChannel, 'Id', 'id');
+        const imageTags = read(nativeChannel, 'ImageTags', 'imageTags') || {};
+        const primaryTag = imageTags.Primary || imageTags.primary;
+        if (nativeId && primaryTag) {
+            return apiUrl('Items/' + encodeURIComponent(nativeId) + '/Images/Primary', {
+                tag: primaryTag,
+                maxWidth: 640,
+                quality: 90
+            });
+        }
+
+        return channel.logoUrl ? apiUrl(channel.logoUrl) : '';
+    }
+
+    function currentProgramTitle(channel, nativeChannel) {
+        const current = read(nativeChannel, 'CurrentProgram', 'currentProgram');
+        if (current) {
+            const name = read(current, 'Name', 'name');
+            if (name) return name;
+        }
+        return channel.currentTitle || '';
+    }
+
     function channelCard(channel) {
-        const name = escapeHtml(channel.name || 'Channel');
-        const current = channel.currentTitle
-            ? '<div class="cardText cardTextCentered cardText-secondary"><bdi>' + escapeHtml(channel.currentTitle) + '</bdi></div>'
+        const nativeChannel = channel.nativeChannel;
+        const nativeId = read(nativeChannel, 'Id', 'id') || '';
+        const name = escapeHtml(channel.name || read(nativeChannel, 'Name', 'name') || 'Channel');
+        const number = escapeHtml(channel.number || read(nativeChannel, 'ChannelNumber', 'channelNumber') || '');
+        const currentTitle = currentProgramTitle(channel, nativeChannel);
+        const imageUrl = resolveImageUrl(channel, nativeChannel);
+        const current = currentTitle
+            ? '<div class="cardText cardTextCentered cardText-secondary"><bdi>' + escapeHtml(currentTitle) + '</bdi></div>'
+            : '<div class="cardText cardTextCentered cardText-secondary"><bdi>Live TV</bdi></div>';
+        const numberText = number
+            ? '<span class="spectralTvChannelNumber">' + number + '</span>'
             : '';
-        const id = escapeHtml(channel.id || '');
-        return '<div class="card overflowBackdropCard card-hoverable spectralTvChannelCard" data-spectral-channel="' + id + '">' +
+        const image = imageUrl
+            ? '<img class="spectralTvChannelLogo" src="' + escapeHtml(imageUrl) + '" alt="" loading="lazy" />'
+            : '<span class="spectralTvChannelTileName">' + name + '</span>';
+
+        return '<div class="card overflowBackdropCard card-hoverable spectralTvChannelCard" data-spectral-channel="' + escapeHtml(channel.id || '') + '" data-native-channel="' + escapeHtml(nativeId) + '">' +
             '<div class="cardBox cardBox-bottompadded">' +
                 '<div class="cardScalable">' +
                     '<div class="cardPadder cardPadder-overflowBackdrop"></div>' +
                     '<button type="button" class="cardImageContainer coveredImage cardContent spectralTvChannelButton" aria-label="' + name + '">' +
-                        '<span class="spectralTvChannelTileName">' + name + '</span>' +
+                        image + numberText +
                     '</button>' +
                 '</div>' +
                 '<div class="cardText cardTextCentered cardText-first"><bdi>' + name + '</bdi></div>' +
@@ -219,32 +319,23 @@
         const style = document.createElement('style');
         style.id = 'spectralTvNativeChannelsStyles';
         style.textContent = '\n' +
-            '.spectralTvChannelButton{border:0;width:100%;height:100%;padding:0;background:linear-gradient(145deg,rgba(42,44,55,.96),rgba(15,16,22,.98));color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;}\n' +
+            '.spectralTvChannelButton{position:relative;border:0;width:100%;height:100%;padding:0;background:linear-gradient(145deg,rgba(42,44,55,.96),rgba(15,16,22,.98));color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;}\n' +
+            '.spectralTvChannelLogo{width:82%;height:82%;object-fit:contain;display:block;}\n' +
             '.spectralTvChannelTileName{font-size:1.35em;font-weight:600;text-align:center;padding:1em;line-height:1.15;}\n' +
+            '.spectralTvChannelNumber{position:absolute;left:.55em;bottom:.45em;padding:.15em .4em;border-radius:.25em;background:rgba(0,0,0,.72);font-size:.82em;font-weight:600;}\n' +
             '.spectralTvChannelsMessage{padding-left:3.3%;opacity:.8;}\n';
         document.head.appendChild(style);
     }
 
-    async function openChannel(channelId) {
-        if (!channelId) return;
-        try {
-            const sync = await apiJson('SpectralTV/api/viewer/on-demand/' + encodeURIComponent(channelId) + '/playlist', {
-                method: 'POST',
-                query: { programs: 24 }
-            });
-            const playlistId = sync && (sync.playlistId || sync.PlaylistId);
-            if (!playlistId) throw new Error('No playlist was returned for this channel.');
-
-            // Jellyfin 12 uses #/ routes. The old #!/ route silently opened the wrong location.
-            window.location.hash = '#/details?id=' + encodeURIComponent(playlistId) +
-                '&serverId=' + encodeURIComponent(apiClient().serverId());
-        } catch (error) {
-            bridge.lastError = String(error && error.message ? error.message : error);
-            console.warn('[Spectral TV] Could not open channel.', error);
-            if (window.Dashboard && typeof window.Dashboard.alert === 'function') {
-                window.Dashboard.alert('Spectral TV could not open this channel.');
-            }
+    function openChannel(nativeChannelId) {
+        if (!nativeChannelId) {
+            window.location.hash = '#/livetv.html?tab=channels';
+            return;
         }
+
+        const api = apiClient();
+        window.location.hash = '#/details?id=' + encodeURIComponent(nativeChannelId)
+            + '&serverId=' + encodeURIComponent(api && typeof api.serverId === 'function' ? api.serverId() : '');
     }
 
     function bindChannelClicks(container) {
@@ -254,12 +345,12 @@
             card.addEventListener('click', function (event) {
                 event.preventDefault();
                 event.stopPropagation();
-                void openChannel(card.getAttribute('data-spectral-channel'));
+                openChannel(card.getAttribute('data-native-channel'));
             });
         });
     }
 
-    async function renderChannels() {
+    async function renderChannels(force) {
         const generation = ++renderGeneration;
         await loadSelection(false);
         if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= MAX_SECTIONS) return false;
@@ -270,23 +361,41 @@
         if (!slot) return false;
 
         const renderKey = String(currentUserId() || '') + ':' + selectedIndex;
-        if (slot.dataset.spectralTvRendered === renderKey
-            && (slot.querySelector('.spectralTvChannelsItems') || slot.querySelector('.spectralTvChannelsMessage'))) {
+        if (!force
+            && slot.dataset.spectralTvRendered === renderKey
+            && (slot.querySelector('.spectralTvChannelsItems') || slot.querySelector('.spectralTvChannelsMessage'))
+            && Date.now() - lastRenderAt < RENDER_CACHE_MS) {
             return true;
         }
 
         try {
-            const channels = await apiJson(CHANNELS_ENDPOINT);
+            const results = await Promise.all([
+                apiJson(CHANNELS_ENDPOINT),
+                loadNativeLiveTvChannels()
+            ]);
             if (generation !== renderGeneration || !document.body.contains(slot)) return false;
-            ensureStyles();
 
-            const list = Array.isArray(channels) ? channels : [];
+            const spectralChannels = Array.isArray(results[0]) ? results[0] : [];
+            const nativeChannels = Array.isArray(results[1]) ? results[1] : [];
+            const list = spectralChannels.map(function (channel) {
+                return Object.assign({}, channel, {
+                    nativeChannel: findNativeChannel(channel, nativeChannels)
+                });
+            });
+
+            bridge.spectralChannelCount = spectralChannels.length;
+            bridge.nativeChannelCount = nativeChannels.length;
+            bridge.matchedChannelCount = list.filter(function (channel) { return !!channel.nativeChannel; }).length;
+
+            ensureStyles();
             let html = '<div class="sectionTitleContainer sectionTitleContainer-cards padded-left"><h2 class="sectionTitle sectionTitle-cards">Channels</h2></div>';
             if (!list.length) {
-                html += '<div class="spectralTvChannelsMessage">No enabled Spectral TV on-demand channels yet.</div>';
+                html += '<div class="spectralTvChannelsMessage">No enabled Spectral TV channels yet.</div>';
                 slot.innerHTML = html;
                 slot.dataset.spectralTvRendered = renderKey;
+                lastRenderAt = Date.now();
                 bridge.homeRendered = true;
+                bridge.lastError = null;
                 return true;
             }
 
@@ -296,6 +405,7 @@
                 '</div></div>';
             slot.innerHTML = html;
             slot.dataset.spectralTvRendered = renderKey;
+            lastRenderAt = Date.now();
             bindChannelClicks(slot);
             bridge.homeRendered = true;
             bridge.lastError = null;
@@ -310,17 +420,17 @@
         }
     }
 
-    async function run() {
+    async function run(forceRender) {
         scheduled = false;
         resetForUserChange();
         await patchHomeSettings();
-        await renderChannels();
+        await renderChannels(!!forceRender);
     }
 
-    function schedule(delay) {
+    function schedule(delay, forceRender) {
         if (scheduled) return;
         scheduled = true;
-        window.setTimeout(function () { void run(); }, delay == null ? 80 : delay);
+        window.setTimeout(function () { void run(forceRender); }, delay == null ? 80 : delay);
     }
 
     function resetForUserChange() {
@@ -329,11 +439,12 @@
             settingsLoadedForUser = null;
             selectedIndex = null;
             settingsRevision++;
+            lastRenderAt = 0;
         }
     }
 
     const observer = new MutationObserver(function () {
-        schedule(80);
+        schedule(80, false);
     });
 
     function start() {
@@ -343,16 +454,14 @@
         }
 
         observer.observe(document.body, { childList: true, subtree: true });
-        window.addEventListener('hashchange', function () { schedule(0); });
-        window.addEventListener('pageshow', function () { schedule(0); });
+        window.addEventListener('hashchange', function () { schedule(0, true); });
+        window.addEventListener('pageshow', function () { schedule(0, true); });
         document.addEventListener('visibilitychange', function () {
-            if (!document.hidden) schedule(0);
+            if (!document.hidden) schedule(0, true);
         });
 
-        // A low-frequency safety pass covers client-side routes that reuse a settled DOM and
-        // therefore produce no useful mutation after the Home settings component is attached.
-        window.setInterval(function () { schedule(0); }, 2000);
-        schedule(0);
+        window.setInterval(function () { schedule(0, true); }, 15000);
+        schedule(0, true);
         console.info('[Spectral TV] Channels Home bridge loaded.');
     }
 
