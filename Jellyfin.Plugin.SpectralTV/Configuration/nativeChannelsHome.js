@@ -26,27 +26,48 @@
         return api ? api.getUrl(path, query || {}) : path;
     }
 
+    function requestHeaders(hasBody) {
+        const api = apiClient();
+        const headers = { Accept: 'application/json' };
+        if (hasBody) headers['Content-Type'] = 'application/json';
+
+        if (api && typeof api.setRequestHeaders === 'function') {
+            api.setRequestHeaders(headers);
+        } else if (api && typeof api.accessToken === 'function') {
+            const token = api.accessToken();
+            if (token) headers['X-Emby-Token'] = token;
+        }
+
+        return headers;
+    }
+
     async function apiJson(path, options) {
         const api = apiClient();
         if (!api) throw new Error('Jellyfin ApiClient is not ready.');
 
-        if (!options || !options.method || options.method === 'GET') {
-            return api.getJSON(apiUrl(path, options && options.query));
-        }
-
-        const response = await api.fetch({
-            url: apiUrl(path, options.query),
-            type: options.method,
-            dataType: 'json',
-            contentType: 'application/json',
-            data: options.body == null ? undefined : JSON.stringify(options.body)
+        const method = options && options.method ? options.method : 'GET';
+        const hasBody = options && options.body !== undefined && options.body !== null;
+        const response = await window.fetch(apiUrl(path, options && options.query), {
+            method: method,
+            credentials: 'same-origin',
+            headers: requestHeaders(hasBody),
+            body: hasBody ? JSON.stringify(options.body) : undefined
         });
 
-        if (!response) return null;
-        if (typeof response.json === 'function' && response.status !== 204) {
-            try { return await response.json(); } catch (_) { return null; }
+        if (!response.ok) {
+            const text = await response.text();
+            let message = text || response.statusText || 'Request failed';
+            try {
+                const parsed = JSON.parse(text);
+                message = parsed.message || parsed.detail || parsed.title || message;
+            } catch (_) { }
+            throw new Error(message);
         }
-        return null;
+
+        if (response.status === 204 || response.status === 205) return null;
+        const text = await response.text();
+        if (!text) return null;
+        try { return JSON.parse(text); } catch (_) { return text; }
     }
 
     async function loadSelection() {
@@ -66,6 +87,7 @@
 
     async function saveSelection(index) {
         selectedIndex = Number.isInteger(index) ? index : null;
+        settingsLoadedForUser = currentUserId();
         try {
             await apiJson(SETTINGS_ENDPOINT, {
                 method: 'POST',
@@ -122,11 +144,11 @@
                 form.addEventListener('submit', function () {
                     const currentSelects = getHomeSelects();
                     const index = currentSelects.findIndex(select => select.value === SECTION_VALUE);
-                    saveSelection(index >= 0 ? index : null);
+                    void saveSelection(index >= 0 ? index : null);
 
-                    // Jellyfin's server only accepts its built-in HomeSectionType enum. Translate our
-                    // custom slot to a native empty slot for the normal save, while Spectral remembers
-                    // the real Channels position separately.
+                    // Jellyfin 12 serializes these values into a fixed HomeSectionType enum. Keep
+                    // its native save valid by sending None for our custom slot; Spectral stores the
+                    // real slot separately in this same viewer's display preferences.
                     if (index >= 0) currentSelects[index].value = 'none';
 
                     window.setTimeout(function () {
@@ -189,8 +211,7 @@
             const playlistId = sync && (sync.playlistId || sync.PlaylistId);
             if (!playlistId) throw new Error('No playlist was returned for this channel.');
 
-            const target = '#!/details?id=' + encodeURIComponent(playlistId) + '&serverId=' + encodeURIComponent(apiClient().serverId());
-            window.location.hash = target;
+            window.location.hash = '!/details?id=' + encodeURIComponent(playlistId) + '&serverId=' + encodeURIComponent(apiClient().serverId());
         } catch (error) {
             console.warn('[Spectral TV] Could not open channel.', error);
             if (window.Dashboard && typeof window.Dashboard.alert === 'function') {
@@ -206,7 +227,7 @@
             card.addEventListener('click', function (event) {
                 event.preventDefault();
                 event.stopPropagation();
-                openChannel(card.getAttribute('data-spectral-channel'));
+                void openChannel(card.getAttribute('data-spectral-channel'));
             });
         });
     }
@@ -221,6 +242,12 @@
         const slot = home.querySelector('.section' + selectedIndex);
         if (!slot) return false;
 
+        const renderKey = String(currentUserId() || '') + ':' + selectedIndex;
+        if (slot.dataset.spectralTvRendered === renderKey
+            && (slot.querySelector('.spectralTvChannelsItems') || slot.querySelector('.spectralTvChannelsEmpty'))) {
+            return true;
+        }
+
         try {
             const channels = await apiJson(CHANNELS_ENDPOINT);
             if (generation !== renderGeneration || !document.body.contains(slot)) return false;
@@ -231,6 +258,7 @@
             if (!list.length) {
                 html += '<div class="spectralTvChannelsEmpty">No enabled Spectral TV on-demand channels yet.</div>';
                 slot.innerHTML = html;
+                slot.dataset.spectralTvRendered = renderKey;
                 return true;
             }
 
@@ -239,6 +267,7 @@
                 list.map(channelCard).join('') +
                 '</div></div>';
             slot.innerHTML = html;
+            slot.dataset.spectralTvRendered = renderKey;
             bindChannelClicks(slot);
             return true;
         } catch (error) {
