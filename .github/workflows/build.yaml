@@ -108,6 +108,9 @@ jobs:
       - name: Smoke test Spectral TV inside Jellyfin 12 Linux
         run: bash scripts/smoke-test-jellyfin-linux.sh "${{ steps.jprm.outputs.artifact }}"
 
+      - name: Smoke test Channels browser injection
+        run: bash scripts/smoke-test-channels-web-injection.sh "${{ steps.jprm.outputs.artifact }}"
+
       - name: Upload Artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -153,12 +156,12 @@ jobs:
             gh release upload beta "$artifact"
             gh release edit beta \
               --title "Spectral TV Latest Beta" \
-              --notes "Latest installable Jellyfin 12 Linux/Synology beta of Spectral TV. Every published build passes package validation, a partial-legacy-schema upgrade probe, and a Jellyfin 12 Linux startup smoke test before release." \
+              --notes "Latest installable Jellyfin 12 Linux/Synology beta of Spectral TV. Every published build passes package validation, a partial-legacy-schema upgrade probe, a Jellyfin 12 Linux startup smoke test, and an end-to-end Channels web-injection smoke test before release." \
               --prerelease
           else
             gh release create beta "$artifact" \
               --title "Spectral TV Latest Beta" \
-              --notes "Latest installable Jellyfin 12 Linux/Synology beta of Spectral TV. Every published build passes package validation, a partial-legacy-schema upgrade probe, and a Jellyfin 12 Linux startup smoke test before release." \
+              --notes "Latest installable Jellyfin 12 Linux/Synology beta of Spectral TV. Every published build passes package validation, a partial-legacy-schema upgrade probe, a Jellyfin 12 Linux startup smoke test, and an end-to-end Channels web-injection smoke test before release." \
               --prerelease
           fi
 
