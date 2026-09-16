@@ -3,6 +3,7 @@ using Jellyfin.Plugin.SpectralTV.Data;
 using Jellyfin.Plugin.SpectralTV.Services;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,6 +42,11 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<StreamService>();
         serviceCollection.AddSingleton<Streaming.FfmpegCommandBuilder>();
         serviceCollection.AddSingleton<PlayoutBuilderService>();
+
+        // Inject the Channels browser bridge into Jellyfin Web directly at request time.
+        // This is deliberately independent from JavaScript Injector or any other plugin.
+        serviceCollection.AddSingleton<IStartupFilter, SpectralChannelsStartupFilter>();
+
         serviceCollection.AddHostedService(sp => sp.GetRequiredService<PlayoutBuilderService>());
         serviceCollection.AddHostedService<DatabaseInitializer>();
         serviceCollection.AddHostedService<OnDemandPlaybackObserver>();
