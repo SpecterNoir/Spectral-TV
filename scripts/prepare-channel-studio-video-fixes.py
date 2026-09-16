@@ -3,6 +3,7 @@ from pathlib import Path
 
 HTML_PATH = Path("Jellyfin.Plugin.SpectralTV/Configuration/channelStudioPage.html")
 JS_PATH = Path("Jellyfin.Plugin.SpectralTV/Configuration/channelStudio.js")
+CHANNELS_HOME_PATH = Path("Jellyfin.Plugin.SpectralTV/Configuration/nativeChannelsHome.js")
 
 html = HTML_PATH.read_text(encoding="utf-8")
 js = JS_PATH.read_text(encoding="utf-8")
@@ -158,4 +159,10 @@ if "failed (HTTP ${response.status})" not in js:
 if "request('/diagnostics/repair'" not in js or 'id="cs-health"' not in html:
     raise SystemExit("Real-server database diagnostics were not installed in Channel Studio")
 
-print("Prepared Channel Studio fixes, fresh diagnostics, and self-repair from the end-to-end video review.")
+channels_home = CHANNELS_HOME_PATH.read_text(encoding="utf-8")
+if "#/livetv.html?tab=channels" in channels_home:
+    raise SystemExit("Channels Home still contains the invalid Jellyfin 12 Live TV fallback route")
+if "#/livetv?tab=2&serverId=" not in channels_home:
+    raise SystemExit("Channels Home is missing Jellyfin 12's canonical Channels-tab fallback route")
+
+print("Prepared Channel Studio fixes, fresh diagnostics, self-repair, and Channels navigation guards.")
