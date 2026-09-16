@@ -10,6 +10,7 @@ artifact=$(realpath "$1")
 workdir=$(mktemp -d)
 container="spectral-tv-web-smoke-${GITHUB_RUN_ID:-local}-$$"
 base_url="http://127.0.0.1:18097"
+auth_identity='MediaBrowser Client="Spectral TV Channels CI", DeviceId="spectral-tv-channels-ci", Device="GitHub Actions", Version="1.0"'
 web_html="$workdir/index.html"
 bridge_js="$workdir/channels-home.js"
 browser_html="$workdir/channels-home-browser.html"
@@ -35,6 +36,24 @@ fail_with_logs() {
   fi
   docker logs "$container" >&2 || true
   exit 1
+}
+
+json_field() {
+  python3 - "$1" "$2" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding='utf-8') as handle:
+    value = json.load(handle)
+for part in sys.argv[2].split('.'):
+    value = value[part]
+if isinstance(value, bool):
+    print('true' if value else 'false')
+elif value is None:
+    print('')
+else:
+    print(value)
+PY
 }
 
 mkdir -p "$workdir/config/plugins/Spectral TV_test"
@@ -108,11 +127,81 @@ done
 if [[ "$startup_user_code" != "200" ]]; then
   fail_with_logs "Jellyfin setup did not become ready for the Channels browser test (HTTP $startup_user_code)."
 fi
+startup_username=$(json_field "$startup_user" "Name")
+if [[ -z "$startup_username" ]]; then
+  fail_with_logs "The disposable Jellyfin startup user had no name." "$startup_user"
+fi
 
 wizard_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
   -X POST "$base_url/Startup/Complete" || true)
 if [[ "$wizard_code" != "204" ]]; then
   fail_with_logs "Could not complete the disposable Jellyfin startup wizard for the Channels browser test (HTTP $wizard_code)."
+fi
+
+# Authenticate the first user. This same session is used first as the elevated Channel Studio
+# caller and then as an ordinary viewer, proving both surfaces see the same channel record.
+auth_request="$workdir/auth-request.json"
+python3 - "$startup_username" >"$auth_request" <<'PY'
+import json
+import sys
+print(json.dumps({"Username": sys.argv[1], "Pw": ""}))
+PY
+auth_response="$workdir/auth-response.json"
+auth_code=$(curl -sS -o "$auth_response" -w '%{http_code}' --max-time 8 \
+  -X POST "$base_url/Users/AuthenticateByName" \
+  -H "Authorization: $auth_identity" \
+  -H 'Content-Type: application/json' \
+  --data-binary "@$auth_request" || true)
+if [[ "$auth_code" != "200" ]]; then
+  fail_with_logs "Could not authenticate the disposable Jellyfin administrator (HTTP $auth_code)." "$auth_response"
+fi
+access_token=$(json_field "$auth_response" "AccessToken")
+if [[ -z "$access_token" ]]; then
+  fail_with_logs "Jellyfin authentication returned no access token." "$auth_response"
+fi
+auth_header="$auth_identity, Token=\"$access_token\""
+
+# Create a channel through the exact real-channel endpoint used by Channel Studio.
+# The viewer endpoint must return the same persisted channel; otherwise the Home row and
+# the editor have drifted onto different data models again.
+create_channel="$workdir/create-channel.json"
+create_code=$(curl -sS -o "$create_channel" -w '%{http_code}' --max-time 8 \
+  -X POST "$base_url/SpectralTV/api/channels" \
+  -H "Authorization: $auth_header" \
+  -H 'Content-Type: application/json' \
+  --data '{"number":141,"name":"CI Spectral Channel","enabled":true,"aspectRatio":0,"scanlinesEnabled":false,"bugPlacement":0}' || true)
+if [[ "$create_code" != "201" ]]; then
+  fail_with_logs "Channel Studio's real channel API could not create the CI channel (HTTP $create_code)." "$create_channel"
+fi
+created_channel_id=$(json_field "$create_channel" "id")
+if [[ -z "$created_channel_id" ]]; then
+  fail_with_logs "The real channel API created a channel without returning its ID." "$create_channel"
+fi
+
+viewer_channels="$workdir/viewer-channels.json"
+viewer_code=$(curl -sS -o "$viewer_channels" -w '%{http_code}' --max-time 8 \
+  "$base_url/SpectralTV/api/viewer/channels" \
+  -H "Authorization: $auth_header" || true)
+if [[ "$viewer_code" != "200" ]]; then
+  fail_with_logs "The viewer Channels endpoint returned HTTP $viewer_code instead of 200." "$viewer_channels"
+fi
+python3 - "$viewer_channels" "$created_channel_id" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding='utf-8') as handle:
+    channels = json.load(handle)
+channel_id = sys.argv[2].replace('-', '').lower()
+match = next((c for c in channels if str(c.get('id', '')).replace('-', '').lower() == channel_id), None)
+if match is None:
+    raise SystemExit('Created Channel Studio channel was absent from the viewer Channels endpoint')
+if match.get('name') != 'CI Spectral Channel':
+    raise SystemExit(f"Viewer endpoint returned wrong channel name: {match.get('name')!r}")
+if str(match.get('number')) != '141':
+    raise SystemExit(f"Viewer endpoint returned wrong channel number: {match.get('number')!r}")
+PY
+if [[ $? -ne 0 ]]; then
+  fail_with_logs "The viewer Channels endpoint did not return the channel created through Channel Studio." "$viewer_channels"
 fi
 
 bridge_code=$(curl -sS -o "$bridge_js" -w '%{http_code}' --max-time 5 \
@@ -203,4 +292,4 @@ if grep -Eiq 'BadImageFormatException|Disabling plugin.*Spectral|Spectral TV.*Di
   fail_with_logs "Spectral TV produced a fatal signature during the Channels web-injection smoke test."
 fi
 
-echo "Spectral TV Channels loader, real-channel contract, asset endpoint, and browser DOM smoke test passed."
+echo "Spectral TV Channels real-channel API agreement, loader, asset endpoint, and browser DOM smoke test passed."
