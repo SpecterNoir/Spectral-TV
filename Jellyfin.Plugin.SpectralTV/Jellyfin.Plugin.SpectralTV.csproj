@@ -43,6 +43,7 @@
     <EmbeddedResource Include="Configuration\channelStudio.js" />
     <EmbeddedResource Include="Configuration\liveTvConnectPage.html" />
     <EmbeddedResource Include="Configuration\liveTvConnect.js" />
+    <EmbeddedResource Include="Configuration\nativeChannelsHome.js" />
   </ItemGroup>
 
 </Project>
