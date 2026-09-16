@@ -48,7 +48,7 @@ public sealed class JavaScriptInjectorRegistrar : BackgroundService
                 if (assembly is not null && TryRegister(assembly))
                 {
                     _logger.LogInformation(
-                        "Spectral TV registered its native Channels Home integration with JavaScript Injector");
+                        "Spectral TV registered its Channels Home bridge with JavaScript Injector using the always-loaded bootstrap path");
                     return;
                 }
             }
@@ -115,7 +115,11 @@ public sealed class JavaScriptInjectorRegistrar : BackgroundService
             name = "Spectral TV - Channels Home Section",
             script,
             enabled = true,
-            requiresAuthentication = true,
+            // The bridge itself contains no private data. Loading it through JavaScript Injector's
+            // public bundle avoids depending on that plugin's secondary private-script auth loader.
+            // Spectral's own viewer endpoints remain authenticated and the bridge waits for Jellyfin's
+            // current user before reading or writing per-user state.
+            requiresAuthentication = false,
             pluginId = plugin?.Id.ToString("D") ?? "8a3f6c2d-5b4e-4d9a-a721-3e6f8c1b2d47",
             pluginName = plugin?.Name ?? "Spectral TV",
             pluginVersion = plugin?.Version.ToString() ?? "unknown"
