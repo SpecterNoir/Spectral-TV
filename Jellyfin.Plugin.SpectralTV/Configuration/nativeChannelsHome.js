@@ -328,14 +328,18 @@
     }
 
     function openChannel(nativeChannelId) {
+        const api = apiClient();
+        const serverId = api && typeof api.serverId === 'function' ? api.serverId() : '';
+
         if (!nativeChannelId) {
-            window.location.hash = '#/livetv.html?tab=channels';
+            bridge.lastError = 'This Spectral TV channel is not currently matched to a Jellyfin native Live TV channel.';
+            console.warn('[Spectral TV] Channel card has no native Live TV match; opening Jellyfin Channels instead.');
+            window.location.hash = '#/livetv?tab=2&serverId=' + encodeURIComponent(serverId);
             return;
         }
 
-        const api = apiClient();
         window.location.hash = '#/details?id=' + encodeURIComponent(nativeChannelId)
-            + '&serverId=' + encodeURIComponent(api && typeof api.serverId === 'function' ? api.serverId() : '');
+            + '&serverId=' + encodeURIComponent(serverId);
     }
 
     function bindChannelClicks(container) {
