@@ -46,7 +46,17 @@ import sys
 with open(sys.argv[1], encoding='utf-8') as handle:
     value = json.load(handle)
 for part in sys.argv[2].split('.'):
-    value = value[part]
+    if not isinstance(value, dict):
+        print('')
+        raise SystemExit(0)
+    if part in value:
+        value = value[part]
+        continue
+    key = next((candidate for candidate in value if candidate.lower() == part.lower()), None)
+    if key is None:
+        print('')
+        raise SystemExit(0)
+    value = value[key]
 if isinstance(value, bool):
     print('true' if value else 'false')
 elif value is None:
@@ -113,7 +123,6 @@ if ! grep -Fq 'Spectral TV injected the external Channels Home bridge loader int
   fail_with_logs "Spectral TV injected markup was present, but the expected middleware success log was missing."
 fi
 
-# Complete the disposable first-run wizard before requesting ordinary plugin API routes.
 startup_user="$workdir/startup-user.json"
 startup_user_code=""
 for _ in $(seq 1 90); do
@@ -138,8 +147,6 @@ if [[ "$wizard_code" != "204" ]]; then
   fail_with_logs "Could not complete the disposable Jellyfin startup wizard for the Channels browser test (HTTP $wizard_code)."
 fi
 
-# Authenticate the first user. This same session is used first as the elevated Channel Studio
-# caller and then as an ordinary viewer, proving both surfaces see the same channel record.
 auth_request="$workdir/auth-request.json"
 python3 - "$startup_username" >"$auth_request" <<'PY'
 import json
@@ -161,9 +168,6 @@ if [[ -z "$access_token" ]]; then
 fi
 auth_header="$auth_identity, Token=\"$access_token\""
 
-# Create a channel through the exact real-channel endpoint used by Channel Studio.
-# The viewer endpoint must return the same persisted channel; otherwise the Home row and
-# the editor have drifted onto different data models again.
 create_channel="$workdir/create-channel.json"
 create_code=$(curl -sS -o "$create_channel" -w '%{http_code}' --max-time 8 \
   -X POST "$base_url/SpectralTV/api/channels" \
@@ -185,22 +189,29 @@ viewer_code=$(curl -sS -o "$viewer_channels" -w '%{http_code}' --max-time 8 \
 if [[ "$viewer_code" != "200" ]]; then
   fail_with_logs "The viewer Channels endpoint returned HTTP $viewer_code instead of 200." "$viewer_channels"
 fi
-python3 - "$viewer_channels" "$created_channel_id" <<'PY'
+if ! python3 - "$viewer_channels" "$created_channel_id" <<'PY'
 import json
 import sys
 
 with open(sys.argv[1], encoding='utf-8') as handle:
     channels = json.load(handle)
 channel_id = sys.argv[2].replace('-', '').lower()
-match = next((c for c in channels if str(c.get('id', '')).replace('-', '').lower() == channel_id), None)
+
+def get_ci(obj, name):
+    if name in obj:
+        return obj[name]
+    key = next((candidate for candidate in obj if candidate.lower() == name.lower()), None)
+    return obj.get(key) if key is not None else None
+
+match = next((c for c in channels if str(get_ci(c, 'id') or '').replace('-', '').lower() == channel_id), None)
 if match is None:
     raise SystemExit('Created Channel Studio channel was absent from the viewer Channels endpoint')
-if match.get('name') != 'CI Spectral Channel':
-    raise SystemExit(f"Viewer endpoint returned wrong channel name: {match.get('name')!r}")
-if str(match.get('number')) != '141':
-    raise SystemExit(f"Viewer endpoint returned wrong channel number: {match.get('number')!r}")
+if get_ci(match, 'name') != 'CI Spectral Channel':
+    raise SystemExit(f"Viewer endpoint returned wrong channel name: {get_ci(match, 'name')!r}")
+if str(get_ci(match, 'number')) != '141':
+    raise SystemExit(f"Viewer endpoint returned wrong channel number: {get_ci(match, 'number')!r}")
 PY
-if [[ $? -ne 0 ]]; then
+then
   fail_with_logs "The viewer Channels endpoint did not return the channel created through Channel Studio." "$viewer_channels"
 fi
 
@@ -214,8 +225,6 @@ if ! grep -Fq "const SECTION_VALUE = 'spectraltvchannels';" "$bridge_js" \
   fail_with_logs "The Spectral TV Channels bridge endpoint did not return the expected executable script."
 fi
 
-# The Home row must represent the real Channel Studio / M3U channels, not the older
-# experimental on-demand playlist model. Keep this contract release-gated.
 if ! grep -Fq "const CHANNELS_ENDPOINT = 'SpectralTV/api/viewer/channels';" "$bridge_js"; then
   fail_with_logs "The Channels Home bridge is not reading Spectral TV's real viewer channel endpoint." "$bridge_js"
 fi
@@ -226,16 +235,11 @@ if grep -Fq 'SpectralTV/api/viewer/on-demand' "$bridge_js"; then
   fail_with_logs "The Channels Home bridge regressed to the obsolete on-demand playlist data source." "$bridge_js"
 fi
 
-# Run the delivered script in a real browser DOM containing Jellyfin 12's exact Home select ids.
-# Merely finding source text in index.html did not catch build 0.0.3.135's real browser failure.
 browser_bin=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
 if [[ -z "$browser_bin" ]]; then
   fail_with_logs "No Chromium-compatible browser was available for the Channels DOM smoke test."
 fi
 
-# Load Jellyfin's actual web shell, not just a local fixture. The marker is written only
-# by executing the delivered bridge, so this catches an invalid loader URL, CSP failure,
-# MIME problem, or other condition where injected source exists but never runs.
 "$browser_bin" \
   --headless=new \
   --no-sandbox \
