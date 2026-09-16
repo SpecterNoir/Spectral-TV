@@ -125,6 +125,18 @@ if ! grep -Fq "const SECTION_VALUE = 'spectraltvchannels';" "$bridge_js" \
   fail_with_logs "The Spectral TV Channels bridge endpoint did not return the expected executable script."
 fi
 
+# The Home row must represent the real Channel Studio / M3U channels, not the older
+# experimental on-demand playlist model. Keep this contract release-gated.
+if ! grep -Fq "const CHANNELS_ENDPOINT = 'SpectralTV/api/viewer/channels';" "$bridge_js"; then
+  fail_with_logs "The Channels Home bridge is not reading Spectral TV's real viewer channel endpoint." "$bridge_js"
+fi
+if ! grep -Fq "apiJson('LiveTv/Channels'" "$bridge_js"; then
+  fail_with_logs "The Channels Home bridge is not resolving Spectral channels to Jellyfin native Live TV items." "$bridge_js"
+fi
+if grep -Fq 'SpectralTV/api/viewer/on-demand' "$bridge_js"; then
+  fail_with_logs "The Channels Home bridge regressed to the obsolete on-demand playlist data source." "$bridge_js"
+fi
+
 # Run the delivered script in a real browser DOM containing Jellyfin 12's exact Home select ids.
 # Merely finding source text in index.html did not catch build 0.0.3.135's real browser failure.
 browser_bin=$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)
@@ -191,4 +203,4 @@ if grep -Eiq 'BadImageFormatException|Disabling plugin.*Spectral|Spectral TV.*Di
   fail_with_logs "Spectral TV produced a fatal signature during the Channels web-injection smoke test."
 fi
 
-echo "Spectral TV Channels loader, asset endpoint, and real browser DOM smoke test passed."
+echo "Spectral TV Channels loader, real-channel contract, asset endpoint, and browser DOM smoke test passed."
