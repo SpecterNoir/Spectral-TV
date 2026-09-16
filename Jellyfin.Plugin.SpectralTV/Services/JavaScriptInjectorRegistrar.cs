@@ -1,22 +1,21 @@
 using System.Reflection;
 using System.Runtime.Loader;
-using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.SpectralTV.Services;
 
 /// <summary>
-/// Registers Spectral TV's native Jellyfin-Web Home integration with the optional JavaScript Injector
-/// plugin. This is intentionally discovered through reflection so Spectral TV never takes a hard
-/// runtime dependency on JavaScript Injector and cannot prevent Jellyfin from starting when it is absent.
+/// Removes Spectral TV's legacy JavaScript Injector registration after upgrades.
+/// Spectral TV now injects its Channels browser bridge directly through its own
+/// request-time startup filter and no longer depends on JavaScript Injector.
 /// </summary>
 public sealed class JavaScriptInjectorRegistrar : BackgroundService
 {
     private const string ScriptId = "spectral-tv-native-channels-home";
     private static readonly TimeSpan InitialDelay = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
-    private const int MaxAttempts = 24;
+    private const int MaxAttempts = 12;
 
     private readonly ILogger<JavaScriptInjectorRegistrar> _logger;
 
@@ -45,19 +44,17 @@ public sealed class JavaScriptInjectorRegistrar : BackgroundService
                     .FirstOrDefault(candidate =>
                         candidate.FullName?.Contains(".JavaScriptInjector", StringComparison.OrdinalIgnoreCase) == true);
 
-                if (assembly is not null && TryRegister(assembly))
+                if (assembly is not null)
                 {
-                    _logger.LogInformation(
-                        "Spectral TV registered its Channels Home bridge with JavaScript Injector using the always-loaded bootstrap path");
+                    TryUnregisterLegacyScript(assembly);
                     return;
                 }
             }
             catch (Exception ex)
             {
-                // Optional web integration must never affect Jellyfin startup or playback.
                 _logger.LogDebug(
                     ex,
-                    "Spectral TV could not register its optional JavaScript integration on attempt {Attempt}",
+                    "Spectral TV could not clean up its legacy JavaScript Injector entry on attempt {Attempt}",
                     attempt);
             }
 
@@ -70,82 +67,28 @@ public sealed class JavaScriptInjectorRegistrar : BackgroundService
                 return;
             }
         }
-
-        _logger.LogInformation(
-            "JavaScript Injector was not available; Spectral TV Channels will remain available through its other Jellyfin surfaces");
     }
 
-    private bool TryRegister(Assembly injectorAssembly)
+    private void TryUnregisterLegacyScript(Assembly injectorAssembly)
     {
         var interfaceType = injectorAssembly.GetType("Jellyfin.Plugin.JavaScriptInjector.PluginInterface");
-        var register = interfaceType?.GetMethod("RegisterScript", BindingFlags.Public | BindingFlags.Static);
-        if (register is null)
-        {
-            return false;
-        }
-
-        var parameter = register.GetParameters().SingleOrDefault();
-        if (parameter is null)
-        {
-            return false;
-        }
-
-        var parse = parameter.ParameterType.GetMethod(
-            "Parse",
+        var unregister = interfaceType?.GetMethod(
+            "UnregisterScript",
             BindingFlags.Public | BindingFlags.Static,
             binder: null,
             types: [typeof(string)],
             modifiers: null);
-        if (parse is null)
+
+        if (unregister is null)
         {
-            return false;
+            return;
         }
 
-        var script = ReadScript();
-        if (string.IsNullOrWhiteSpace(script))
+        var result = unregister.Invoke(null, [ScriptId]);
+        if (result is true)
         {
-            _logger.LogWarning("Spectral TV native Channels Home script resource was empty");
-            return false;
+            _logger.LogInformation(
+                "Spectral TV removed its obsolete JavaScript Injector Channels bridge registration");
         }
-
-        var plugin = Plugin.Instance;
-        var payloadJson = JsonSerializer.Serialize(new
-        {
-            id = ScriptId,
-            name = "Spectral TV - Channels Home Section",
-            script,
-            enabled = true,
-            // The bridge itself contains no private data. Loading it through JavaScript Injector's
-            // public bundle avoids depending on that plugin's secondary private-script auth loader.
-            // Spectral's own viewer endpoints remain authenticated and the bridge waits for Jellyfin's
-            // current user before reading or writing per-user state.
-            requiresAuthentication = false,
-            pluginId = plugin?.Id.ToString("D") ?? "8a3f6c2d-5b4e-4d9a-a721-3e6f8c1b2d47",
-            pluginName = plugin?.Name ?? "Spectral TV",
-            pluginVersion = plugin?.Version.ToString() ?? "unknown"
-        });
-
-        var payload = parse.Invoke(null, [payloadJson]);
-        if (payload is null)
-        {
-            return false;
-        }
-
-        var result = register.Invoke(null, [payload]);
-        return result is true;
-    }
-
-    private static string ReadScript()
-    {
-        var assembly = typeof(JavaScriptInjectorRegistrar).Assembly;
-        const string ResourceName = "Jellyfin.Plugin.SpectralTV.Configuration.nativeChannelsHome.js";
-        using var stream = assembly.GetManifestResourceStream(ResourceName);
-        if (stream is null)
-        {
-            return string.Empty;
-        }
-
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
     }
 }
