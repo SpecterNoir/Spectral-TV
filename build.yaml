@@ -47,12 +47,16 @@ artifacts:
   - "runtimes/linux-musl-arm64/native/libe_sqlite3.so"
   - "runtimes/linux-musl-arm/native/libe_sqlite3.so"
 changelog: |-
-  - Inject the Channels Home bridge directly into Jellyfin Web through Spectral TV's own request-time ASP.NET startup filter, removing the JavaScript Injector dependency for this feature
-  - Add an end-to-end release gate that boots Jellyfin 12, fetches /web/index.html, and refuses to publish unless the Spectral Channels marker and browser bridge are physically present in the served page
+  - Load the Channels Home bridge as an external, cache-busted plugin asset so browser execution is observable and independent from large inline-script injection
+  - Persist Channels directly in Jellyfin 12's native per-user homesection preference instead of racing Jellyfin's asynchronous save with a duplicate Spectral setting
+  - Migrate any Channels placement saved by builds 0.0.3.125 through 0.0.3.135 into the native Jellyfin Home preference automatically
+  - Add a real Chromium DOM release gate that executes the delivered bridge and refuses to publish unless all ten Jellyfin Home dropdowns receive a Channels option
+  - Load Jellyfin's actual web shell in Chromium and require a runtime marker so injected markup without browser execution can never pass the release gate again
+  - Keep a low-frequency lifecycle safety pass so client-side route reuse cannot leave the Home settings page unpatched
+  - Correct channel-card navigation from the obsolete #!/details route to Jellyfin 12's #/details route
   - Remove any obsolete Spectral TV JavaScript Injector registration left behind by earlier builds so the bridge cannot execute twice after upgrading
   - Keep all viewer-specific Spectral API requests authenticated even though the lightweight browser bridge can safely load before login completes
   - Add Channels to Jellyfin's normal per-user Home screen section dropdowns instead of requiring a separate Home Screen Sections settings surface
-  - Store each viewer's Channels slot separately in Jellyfin display preferences so Spectral does not write an unsupported custom value into Jellyfin 12's fixed HomeSectionType enum
   - Render the selected Channels slot on the ordinary Jellyfin home page and refresh the viewer's private smart playlist when a channel card is opened
   - Keep the optional Home Screen Sections integration isolated so its absence cannot block Jellyfin startup or core Spectral TV playback
   - Register enabled on-demand channels as a Home Screen Sections row named Channels as an additional modular-home compatibility path
