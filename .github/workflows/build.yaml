@@ -51,6 +51,9 @@ jobs:
       - name: Validate admin UI contracts
         run: python3 scripts/validate-admin-ui.py
 
+      - name: Validate Channels browser bridge syntax
+        run: node --check Jellyfin.Plugin.SpectralTV/Configuration/nativeChannelsHome.js
+
       - name: Restore NuGet packages
         run: dotnet restore Jellyfin.Plugin.SpectralTV/Jellyfin.Plugin.SpectralTV.csproj
 

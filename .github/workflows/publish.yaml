@@ -53,6 +53,9 @@ jobs:
       - name: Validate admin UI contracts
         run: python3 scripts/validate-admin-ui.py
 
+      - name: Validate Channels browser bridge syntax
+        run: node --check Jellyfin.Plugin.SpectralTV/Configuration/nativeChannelsHome.js
+
       - name: Restore NuGet packages
         run: dotnet restore Jellyfin.Plugin.SpectralTV/Jellyfin.Plugin.SpectralTV.csproj
 
@@ -120,6 +123,9 @@ jobs:
 
       - name: Smoke test Spectral TV inside Jellyfin 12 Linux
         run: bash scripts/smoke-test-jellyfin-linux.sh "${{ steps.build.outputs.zipfile }}"
+
+      - name: Smoke test Channels browser integration
+        run: bash scripts/smoke-test-channels-web-injection.sh "${{ steps.build.outputs.zipfile }}"
 
       - name: Attach zip to GitHub Release
         uses: softprops/action-gh-release@v2

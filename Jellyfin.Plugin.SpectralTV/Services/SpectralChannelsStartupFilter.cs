@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -16,10 +17,8 @@ public sealed class SpectralChannelsStartupFilter : IStartupFilter
     internal const string StartMarker = "<!-- BEGIN Spectral TV Channels Home -->";
     internal const string EndMarker = "<!-- END Spectral TV Channels Home -->";
 
-    private static readonly Lazy<string> BridgeScript = new(ReadBridgeScript);
     private readonly ILogger<SpectralChannelsStartupFilter> _logger;
     private int _loggedSuccess;
-    private int _loggedMissingScript;
 
     public SpectralChannelsStartupFilter(ILogger<SpectralChannelsStartupFilter> logger)
     {
@@ -83,26 +82,23 @@ public sealed class SpectralChannelsStartupFilter : IStartupFilter
         {
             if (!html.Contains(StartMarker, StringComparison.OrdinalIgnoreCase))
             {
-                var script = BridgeScript.Value;
-                if (string.IsNullOrWhiteSpace(script))
+                var bodyClose = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
+                if (bodyClose >= 0)
                 {
-                    if (Interlocked.Exchange(ref _loggedMissingScript, 1) == 0)
-                    {
-                        _logger.LogWarning("Spectral TV Channels browser bridge resource was empty; Home integration was not injected");
-                    }
-                }
-                else
-                {
-                    var bodyClose = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
-                    if (bodyClose >= 0)
-                    {
-                        var block = $"{StartMarker}\n<script>\n{script}\n</script>\n{EndMarker}\n";
-                        html = html[..bodyClose] + block + html[bodyClose..];
+                    // Keep executable code out of index.html. A normal external script request is
+                    // observable, cache-controllable, and follows the same proven loading model as
+                    // JavaScript Injector. The relative URL also preserves Jellyfin base paths.
+                    var cacheKey = typeof(SpectralChannelsStartupFilter).Assembly
+                        .GetName()
+                        .Version?
+                        .ToString()
+                        ?? DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
+                    var block = $"{StartMarker}\n<script defer src=\"../SpectralTV/web/channels-home.js?v={cacheKey}\"></script>\n{EndMarker}\n";
+                    html = html[..bodyClose] + block + html[bodyClose..];
 
-                        if (Interlocked.Exchange(ref _loggedSuccess, 1) == 0)
-                        {
-                            _logger.LogInformation("Spectral TV injected the Channels Home bridge directly into Jellyfin Web");
-                        }
+                    if (Interlocked.Exchange(ref _loggedSuccess, 1) == 0)
+                    {
+                        _logger.LogInformation("Spectral TV injected the external Channels Home bridge loader into Jellyfin Web");
                     }
                 }
             }
@@ -134,17 +130,4 @@ public sealed class SpectralChannelsStartupFilter : IStartupFilter
             || path.Equals("/web", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string ReadBridgeScript()
-    {
-        var assembly = typeof(SpectralChannelsStartupFilter).Assembly;
-        const string resourceName = "Jellyfin.Plugin.SpectralTV.Configuration.nativeChannelsHome.js";
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-        if (stream is null)
-        {
-            return string.Empty;
-        }
-
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }
 }
