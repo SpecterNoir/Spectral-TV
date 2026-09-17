@@ -25,17 +25,20 @@ public class SetupController : ControllerBase
     private readonly IServerConfigurationManager _configurationManager;
     private readonly ITunerHostManager _tunerHostManager;
     private readonly IListingsManager _listingsManager;
+    private readonly PlayoutBuilderService _playoutBuilder;
 
     public SetupController(
         IServerApplicationHost appHost,
         IServerConfigurationManager configurationManager,
         ITunerHostManager tunerHostManager,
-        IListingsManager listingsManager)
+        IListingsManager listingsManager,
+        PlayoutBuilderService playoutBuilder)
     {
         _appHost = appHost;
         _configurationManager = configurationManager;
         _tunerHostManager = tunerHostManager;
         _listingsManager = listingsManager;
+        _playoutBuilder = playoutBuilder;
     }
 
     [HttpGet("urls")]
@@ -159,6 +162,7 @@ public class SetupController : ControllerBase
             plugin.Configuration.LiveTvTunerHostId = tuner.Id;
             plugin.Configuration.LiveTvListingsProviderId = listings.Id;
             plugin.SaveConfiguration();
+            _playoutBuilder.QueueLiveTvRefresh();
 
             return Ok(BuildLiveTvStatus());
         }

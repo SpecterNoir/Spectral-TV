@@ -8,11 +8,16 @@ public class ChannelService
 {
     private readonly SpectralTvDbContext _db;
     private readonly LogoSetService _logoSets;
+    private readonly PlayoutBuilderService _playoutBuilder;
 
-    public ChannelService(SpectralTvDbContext db, LogoSetService logoSets)
+    public ChannelService(
+        SpectralTvDbContext db,
+        LogoSetService logoSets,
+        PlayoutBuilderService playoutBuilder)
     {
         _db = db;
         _logoSets = logoSets;
+        _playoutBuilder = playoutBuilder;
     }
 
     public async Task<List<Channel>> GetAllAsync(CancellationToken cancellationToken = default)
@@ -71,6 +76,7 @@ public class ChannelService
         });
         await BindChannelLogoAsync(channel, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
+        _playoutBuilder.QueueLiveTvRefresh();
         return channel;
     }
 
@@ -104,6 +110,7 @@ public class ChannelService
         existing.WeatherLocationQuery = null;
 
         await _db.SaveChangesAsync(cancellationToken);
+        _playoutBuilder.QueueLiveTvRefresh();
         return existing;
     }
 
@@ -117,6 +124,7 @@ public class ChannelService
 
         _db.Channels.Remove(existing);
         await _db.SaveChangesAsync(cancellationToken);
+        _playoutBuilder.QueueLiveTvRefresh();
         return true;
     }
 

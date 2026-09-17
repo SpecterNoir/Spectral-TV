@@ -162,7 +162,9 @@ if "request('/diagnostics/repair'" not in js or 'id="cs-health"' not in html:
 channels_home = CHANNELS_HOME_PATH.read_text(encoding="utf-8")
 if "#/livetv.html?tab=channels" in channels_home:
     raise SystemExit("Channels Home still contains the invalid Jellyfin 12 Live TV fallback route")
-if "#/livetv?tab=2&serverId=" not in channels_home:
-    raise SystemExit("Channels Home is missing Jellyfin 12's canonical Channels-tab fallback route")
+if "#/livetv?tab=2&serverId=" in channels_home:
+    raise SystemExit("An unmatched card still sends viewers to the empty generic Live TV placeholder")
+if 'data-action="play"' not in channels_home or 'data-spectral-unavailable="1"' not in channels_home:
+    raise SystemExit("Channels Home is missing native playback or synchronization-state behavior")
 
-print("Prepared Channel Studio fixes, fresh diagnostics, self-repair, and Channels navigation guards.")
+print("Prepared Channel Studio fixes, fresh diagnostics, self-repair, and native Channels playback guards.")

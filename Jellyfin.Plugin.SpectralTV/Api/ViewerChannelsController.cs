@@ -1,5 +1,11 @@
+using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.SpectralTV.Data;
 using Jellyfin.Plugin.SpectralTV.Domain;
+using Jellyfin.Plugin.SpectralTV.Services;
+using MediaBrowser.Controller.Configuration;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.LiveTv;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -7,9 +13,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Jellyfin.Plugin.SpectralTV.Api;
 
 /// <summary>
-/// Viewer-facing list of the actual Spectral TV live channels published through M3U/XMLTV.
-/// This intentionally reads the main Channels table rather than the separate experimental
-/// on-demand smart-channel tables so the Jellyfin Home row mirrors Channel Studio exactly.
+/// Viewer-facing catalog of the real always-on channels created in Channel Studio.
 /// </summary>
 [ApiController]
 [Route("SpectralTV/api/viewer/channels")]
@@ -17,14 +21,28 @@ namespace Jellyfin.Plugin.SpectralTV.Api;
 public sealed class ViewerChannelsController : ControllerBase
 {
     private readonly SpectralTvDbContext _db;
+    private readonly ILibraryManager _libraryManager;
+    private readonly IServerConfigurationManager _configurationManager;
+    private readonly PlayoutBuilderService _playoutBuilder;
 
-    public ViewerChannelsController(SpectralTvDbContext db)
+    public ViewerChannelsController(
+        SpectralTvDbContext db,
+        ILibraryManager libraryManager,
+        IServerConfigurationManager configurationManager,
+        PlayoutBuilderService playoutBuilder)
     {
         _db = db;
+        _libraryManager = libraryManager;
+        _configurationManager = configurationManager;
+        _playoutBuilder = playoutBuilder;
     }
 
+    /// <summary>
+    /// Lists enabled Spectral channels, their current programs, and their corresponding
+    /// native Jellyfin Live TV item ids when Jellyfin has completed an M3U channel refresh.
+    /// </summary>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<object>>> GetChannels(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<ViewerChannelDto>>> GetChannels(CancellationToken cancellationToken)
     {
         var channels = await _db.Channels
             .AsNoTracking()
@@ -37,42 +55,87 @@ public sealed class ViewerChannelsController : ControllerBase
 
         if (channels.Count == 0)
         {
-            return Ok(Array.Empty<object>());
+            return Ok(Array.Empty<ViewerChannelDto>());
         }
 
-        var now = DateTime.UtcNow;
         var channelIds = channels.Select(channel => channel.Id).ToArray();
-        var currentItems = await _db.PlayoutItems
-            .AsNoTracking()
-            .Where(item => channelIds.Contains(item.ChannelId)
-                && item.Start <= now
-                && item.Finish > now)
-            .OrderBy(item => item.Start)
-            .ToListAsync(cancellationToken);
-
-        var currentByChannel = currentItems
+        var now = DateTime.UtcNow;
+        var currentItems = (await _db.PlayoutItems
+                .AsNoTracking()
+                .Where(item => channelIds.Contains(item.ChannelId)
+                    && item.Start <= now
+                    && item.Finish > now)
+                .OrderByDescending(item => item.Start)
+                .ToListAsync(cancellationToken))
             .GroupBy(item => item.ChannelId)
-            .ToDictionary(
-                group => group.Key,
-                group => group.OrderByDescending(item => item.Start).First());
+            .ToDictionary(group => group.Key, group => group.First());
+
+        // Jellyfin's M3U parser builds ExternalId from the tuner URL plus the stream URL; tvg-id
+        // is only guide metadata. Reproduce Jellyfin's exact formula so similarly named channels
+        // from another tuner can never be selected by mistake.
+        var externalIdByChannel = SpectralLiveTvChannelIds.Build(_configurationManager, channels);
+        var spectralExternalIds = externalIdByChannel.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var liveTvItems = _libraryManager.GetItemList(new InternalItemsQuery
+            {
+                IncludeItemTypes = [BaseItemKind.LiveTvChannel]
+            })
+            .OfType<LiveTvChannel>()
+            .Where(item => !string.IsNullOrWhiteSpace(item.ExternalId)
+                && spectralExternalIds.Contains(item.ExternalId))
+            .GroupBy(item => item.ExternalId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        if (liveTvItems.Count < channels.Count)
+        {
+            // Self-heal the state shown in the failure recording: Spectral has channels, but
+            // Jellyfin's native Live TV catalog has not refreshed since they were created.
+            _playoutBuilder.QueueLiveTvRefresh();
+        }
 
         return Ok(channels.Select(channel =>
         {
-            currentByChannel.TryGetValue(channel.Id, out var current);
-            var logoUrl = string.IsNullOrWhiteSpace(channel.LogoFileName)
-                ? null
-                : $"SpectralTV/api/logos/{channel.Id:N}/{Uri.EscapeDataString(channel.LogoFileName)}";
-
-            return new
+            currentItems.TryGetValue(channel.Id, out var current);
+            LiveTvChannel? liveTvItem = null;
+            if (externalIdByChannel.TryGetValue(channel.Id, out var externalId))
             {
-                id = channel.Id,
-                number = ChannelNumbers.Format(channel.Number),
-                channel.Name,
-                logoUrl,
-                currentTitle = current?.Title,
-                currentStart = current?.Start,
-                currentFinish = current?.Finish
+                liveTvItems.TryGetValue(externalId, out liveTvItem);
+            }
+
+            return new ViewerChannelDto
+            {
+                Id = channel.Id,
+                Number = ChannelNumbers.Format(channel.Number),
+                Name = channel.Name,
+                LogoUrl = string.IsNullOrWhiteSpace(channel.LogoFileName)
+                    ? null
+                    : $"SpectralTV/api/logos/{channel.Id:N}/{Uri.EscapeDataString(channel.LogoFileName)}",
+                CurrentTitle = current?.Title,
+                CurrentStart = current?.Start,
+                CurrentFinish = current?.Finish,
+                ScheduleReady = channel.LastPlayoutBuiltAt.HasValue,
+                LiveTvItemId = liveTvItem?.Id
             };
-        }));
+        }).ToList());
     }
+}
+
+public sealed class ViewerChannelDto
+{
+    public Guid Id { get; set; }
+
+    public string Number { get; set; } = string.Empty;
+
+    public string Name { get; set; } = string.Empty;
+
+    public string? LogoUrl { get; set; }
+
+    public string? CurrentTitle { get; set; }
+
+    public DateTime? CurrentStart { get; set; }
+
+    public DateTime? CurrentFinish { get; set; }
+
+    public bool ScheduleReady { get; set; }
+
+    public Guid? LiveTvItemId { get; set; }
 }

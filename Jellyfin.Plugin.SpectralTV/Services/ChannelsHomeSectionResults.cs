@@ -1,8 +1,10 @@
+using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.SpectralTV.Data;
+using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Playlists;
+using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Querying;
@@ -12,34 +14,36 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.SpectralTV.Services;
 
 /// <summary>
-/// Result provider consumed by Home Screen Sections. Each enabled Spectral on-demand channel is
-/// represented by that viewer's private native Jellyfin playlist, while the card itself is renamed
-/// to the channel name so the playlist remains an implementation detail.
+/// Result provider consumed by Home Screen Sections. Enabled Spectral channels are returned as
+/// their corresponding native Jellyfin Live TV items so normal playback behavior is preserved.
 /// </summary>
 public sealed class ChannelsHomeSectionResults
 {
     private readonly SpectralTvDbContext _db;
-    private readonly IPlaylistManager _playlistManager;
+    private readonly ILibraryManager _libraryManager;
+    private readonly IServerConfigurationManager _configurationManager;
     private readonly IDtoService _dtoService;
     private readonly IUserManager _userManager;
     private readonly ILogger<ChannelsHomeSectionResults> _logger;
 
     public ChannelsHomeSectionResults(
         SpectralTvDbContext db,
-        IPlaylistManager playlistManager,
+        ILibraryManager libraryManager,
+        IServerConfigurationManager configurationManager,
         IDtoService dtoService,
         IUserManager userManager,
         ILogger<ChannelsHomeSectionResults> logger)
     {
         _db = db;
-        _playlistManager = playlistManager;
+        _libraryManager = libraryManager;
+        _configurationManager = configurationManager;
         _dtoService = dtoService;
         _userManager = userManager;
         _logger = logger;
     }
 
     /// <summary>
-    /// Returns the viewer-specific Spectral on-demand channel cards.
+    /// Returns native Jellyfin Live TV cards for the enabled Spectral channels.
     /// This method is synchronous because Home Screen Sections' public section contract is synchronous.
     /// </summary>
     public QueryResult<BaseItemDto> GetResults(ChannelsHomeSectionPayload payload)
@@ -57,10 +61,13 @@ public sealed class ChannelsHomeSectionResults
 
         try
         {
-            var channels = _db.OnDemandChannels
+            var channels = _db.Channels
                 .AsNoTracking()
-                .Where(channel => channel.Enabled)
-                .OrderBy(channel => channel.Name)
+                .Where(channel => channel.Enabled
+                    && (channel.ContentType == Domain.ChannelContentType.TvShow
+                        || channel.ContentType == Domain.ChannelContentType.Movie))
+                .OrderBy(channel => channel.Number)
+                .ThenBy(channel => channel.Name)
                 .ToList();
 
             if (channels.Count == 0)
@@ -68,31 +75,25 @@ public sealed class ChannelsHomeSectionResults
                 return Empty();
             }
 
-            var channelIds = channels.Select(channel => channel.Id).ToArray();
-            var links = _db.OnDemandPlaylistLinks
-                .AsNoTracking()
-                .Where(link => link.UserId == payload.UserId && channelIds.Contains(link.ChannelId))
-                .ToDictionary(link => link.ChannelId);
-
-            var items = new List<BaseItem>();
-            var channelByPlaylistId = new Dictionary<Guid, Domain.OnDemandChannel>();
-
-            foreach (var channel in channels)
+            var channelById = channels.ToDictionary(channel => channel.Id);
+            var channelByExternalId = SpectralLiveTvChannelIds
+                .Build(_configurationManager, channels)
+                .ToDictionary(pair => pair.Value, pair => channelById[pair.Key], StringComparer.OrdinalIgnoreCase);
+            if (channelByExternalId.Count == 0)
             {
-                if (!links.TryGetValue(channel.Id, out var link))
-                {
-                    continue;
-                }
-
-                var playlist = _playlistManager.GetPlaylistForUser(link.JellyfinPlaylistId, payload.UserId);
-                if (playlist is null)
-                {
-                    continue;
-                }
-
-                items.Add(playlist);
-                channelByPlaylistId[playlist.Id] = channel;
+                return Empty();
             }
+
+            var items = _libraryManager.GetItemList(new InternalItemsQuery(user)
+                {
+                    IncludeItemTypes = [BaseItemKind.LiveTvChannel]
+                })
+                .OfType<LiveTvChannel>()
+                .Where(item => !string.IsNullOrWhiteSpace(item.ExternalId)
+                    && channelByExternalId.ContainsKey(item.ExternalId))
+                .OrderBy(item => channelByExternalId[item.ExternalId].Number)
+                .Cast<BaseItem>()
+                .ToList();
 
             if (items.Count == 0)
             {
@@ -116,26 +117,7 @@ public sealed class ChannelsHomeSectionResults
                 ImageTypeLimit = 1
             };
 
-            var dtos = _dtoService.GetBaseItemDtos(items, dtoOptions, user).ToList();
-            foreach (var dto in dtos)
-            {
-                if (!channelByPlaylistId.TryGetValue(dto.Id, out var channel))
-                {
-                    continue;
-                }
-
-                // The native playlist id remains the actual item id so standard Jellyfin cards are
-                // still playable on web. Spectral metadata lets the next UI layer intercept the card
-                // and turn a click into direct resume instead of exposing playlist management.
-                dto.Name = channel.Name;
-                dto.SortName = channel.Name;
-                dto.Overview = "Resume this Spectral TV on-demand channel.";
-                dto.ProviderIds ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                dto.ProviderIds["SpectralTvChannel"] = channel.Id.ToString("D");
-                dto.ProviderIds["SpectralTvPlaylist"] = dto.Id.ToString("D");
-            }
-
-            return new QueryResult<BaseItemDto>(dtos);
+            return new QueryResult<BaseItemDto>(_dtoService.GetBaseItemDtos(items, dtoOptions, user));
         }
         catch (Exception ex)
         {

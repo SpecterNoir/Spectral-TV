@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Jellyfin.Plugin.SpectralTV.Data;
+using MediaBrowser.Controller.LiveTv;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -13,12 +14,60 @@ public class PlayoutBuilderService : BackgroundService
     private static readonly ConcurrentDictionary<Guid, ChannelPlayoutRebuildState> RebuildStates = new();
 
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IGuideManager _guideManager;
     private readonly ILogger<PlayoutBuilderService> _logger;
+    private readonly SemaphoreSlim _liveTvRefreshLock = new(1, 1);
+    private int _liveTvRefreshQueued;
 
-    public PlayoutBuilderService(IServiceScopeFactory scopeFactory, ILogger<PlayoutBuilderService> logger)
+    public PlayoutBuilderService(
+        IServiceScopeFactory scopeFactory,
+        IGuideManager guideManager,
+        ILogger<PlayoutBuilderService> logger)
     {
         _scopeFactory = scopeFactory;
+        _guideManager = guideManager;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Debounces a native Jellyfin Live TV guide refresh after the Spectral M3U lineup changes.
+    /// This keeps Jellyfin's TvChannel items synchronized without blocking the channel editor.
+    /// </summary>
+    public void QueueLiveTvRefresh()
+    {
+        if (Interlocked.Exchange(ref _liveTvRefreshQueued, 1) != 0)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // Collapse a burst of create/update operations into one guide refresh.
+                await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                await _liveTvRefreshLock.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    _logger.LogInformation("Refreshing Jellyfin Live TV after a Spectral channel lineup change");
+                    await _guideManager.RefreshGuide(new Progress<double>(), CancellationToken.None).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _liveTvRefreshLock.Release();
+                }
+            }
+            catch (Exception ex)
+            {
+                // A missing/unconfigured tuner should not make channel editing fail. The Home row
+                // remains visible and reports that playback is waiting for Live TV synchronization.
+                _logger.LogWarning(ex, "Jellyfin Live TV refresh after a Spectral channel change failed");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _liveTvRefreshQueued, 0);
+            }
+        });
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

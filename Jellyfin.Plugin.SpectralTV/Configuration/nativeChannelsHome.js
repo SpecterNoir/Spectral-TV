@@ -206,14 +206,6 @@
         return null;
     }
 
-    function normalize(value) {
-        return String(value == null ? '' : value).trim().toLowerCase();
-    }
-
-    function normalizeNumber(value) {
-        return String(value == null ? '' : value).trim().replace(/^0+/, '');
-    }
-
     async function loadNativeLiveTvChannels() {
         const userId = currentUserId();
         if (!userId) return [];
@@ -237,26 +229,12 @@
     }
 
     function findNativeChannel(spectral, nativeChannels) {
-        const spectralName = normalize(spectral.name);
-        const spectralNumber = normalizeNumber(spectral.number);
+        const resolvedId = read(spectral, 'LiveTvItemId', 'liveTvItemId');
+        if (!resolvedId) return null;
 
-        let match = nativeChannels.find(function (candidate) {
-            return normalize(read(candidate, 'Name', 'name')) === spectralName
-                && normalizeNumber(read(candidate, 'ChannelNumber', 'channelNumber')) === spectralNumber;
-        });
-        if (match) return match;
-
-        match = nativeChannels.find(function (candidate) {
-            return normalize(read(candidate, 'Name', 'name')) === spectralName;
-        });
-        if (match) return match;
-
-        if (spectralNumber) {
-            match = nativeChannels.find(function (candidate) {
-                return normalizeNumber(read(candidate, 'ChannelNumber', 'channelNumber')) === spectralNumber;
-            });
-        }
-        return match || null;
+        return nativeChannels.find(function (candidate) {
+            return String(read(candidate, 'Id', 'id') || '').toLowerCase() === String(resolvedId).toLowerCase();
+        }) || null;
     }
 
     function resolveImageUrl(channel, nativeChannel) {
@@ -285,7 +263,8 @@
 
     function channelCard(channel) {
         const nativeChannel = channel.nativeChannel;
-        const nativeId = read(nativeChannel, 'Id', 'id') || '';
+        const nativeId = read(channel, 'LiveTvItemId', 'liveTvItemId') || read(nativeChannel, 'Id', 'id') || '';
+        const serverId = apiClient() && typeof apiClient().serverId === 'function' ? apiClient().serverId() : '';
         const name = escapeHtml(channel.name || read(nativeChannel, 'Name', 'name') || 'Channel');
         const number = escapeHtml(channel.number || read(nativeChannel, 'ChannelNumber', 'channelNumber') || '');
         const currentTitle = currentProgramTitle(channel, nativeChannel);
@@ -299,17 +278,26 @@
         const image = imageUrl
             ? '<img class="spectralTvChannelLogo" src="' + escapeHtml(imageUrl) + '" alt="" loading="lazy" />'
             : '<span class="spectralTvChannelTileName">' + name + '</span>';
+        const itemAttributes = nativeId
+            ? ' data-id="' + escapeHtml(nativeId) + '" data-serverid="' + escapeHtml(serverId) + '" data-type="TvChannel" data-mediatype="Video" data-isfolder="false"'
+            : '';
+        const buttonAttributes = nativeId
+            ? ' class="cardImageContainer coveredImage cardContent spectralTvChannelButton itemAction" data-action="play"'
+            : ' class="cardImageContainer coveredImage cardContent spectralTvChannelButton spectralTvChannelUnavailable" data-spectral-unavailable="1"';
+        const status = nativeId
+            ? ''
+            : '<div class="cardText cardTextCentered spectralTvChannelStatus"><bdi>Synchronizing with Jellyfin Live TV…</bdi></div>';
 
-        return '<div class="card overflowBackdropCard card-hoverable spectralTvChannelCard" data-spectral-channel="' + escapeHtml(channel.id || '') + '" data-native-channel="' + escapeHtml(nativeId) + '">' +
+        return '<div class="card overflowBackdropCard card-hoverable spectralTvChannelCard" data-spectral-channel="' + escapeHtml(channel.id || '') + '"' + itemAttributes + '>' +
             '<div class="cardBox cardBox-bottompadded">' +
                 '<div class="cardScalable">' +
                     '<div class="cardPadder cardPadder-overflowBackdrop"></div>' +
-                    '<button type="button" class="cardImageContainer coveredImage cardContent spectralTvChannelButton" aria-label="' + name + '">' +
+                    '<button type="button"' + buttonAttributes + ' aria-label="Play ' + name + '">' +
                         image + numberText +
                     '</button>' +
                 '</div>' +
                 '<div class="cardText cardTextCentered cardText-first"><bdi>' + name + '</bdi></div>' +
-                current +
+                current + status +
             '</div>' +
         '</div>';
     }
@@ -323,33 +311,25 @@
             '.spectralTvChannelLogo{width:82%;height:82%;object-fit:contain;display:block;}\n' +
             '.spectralTvChannelTileName{font-size:1.35em;font-weight:600;text-align:center;padding:1em;line-height:1.15;}\n' +
             '.spectralTvChannelNumber{position:absolute;left:.55em;bottom:.45em;padding:.15em .4em;border-radius:.25em;background:rgba(0,0,0,.72);font-size:.82em;font-weight:600;}\n' +
+            '.spectralTvChannelStatus{color:#f59e0b;font-size:.82em;}\n' +
+            '.spectralTvChannelUnavailable{cursor:not-allowed;opacity:.82;}\n' +
             '.spectralTvChannelsMessage{padding-left:3.3%;opacity:.8;}\n';
         document.head.appendChild(style);
     }
 
-    function openChannel(nativeChannelId) {
-        const api = apiClient();
-        const serverId = api && typeof api.serverId === 'function' ? api.serverId() : '';
-
-        if (!nativeChannelId) {
-            bridge.lastError = 'This Spectral TV channel is not currently matched to a Jellyfin native Live TV channel.';
-            console.warn('[Spectral TV] Channel card has no native Live TV match; opening Jellyfin Channels instead.');
-            window.location.hash = '#/livetv?tab=2&serverId=' + encodeURIComponent(serverId);
-            return;
-        }
-
-        window.location.hash = '#/details?id=' + encodeURIComponent(nativeChannelId)
-            + '&serverId=' + encodeURIComponent(serverId);
-    }
-
     function bindChannelClicks(container) {
-        container.querySelectorAll('.spectralTvChannelCard').forEach(function (card) {
-            if (card.dataset.spectralBound === '1') return;
-            card.dataset.spectralBound = '1';
-            card.addEventListener('click', function (event) {
+        container.querySelectorAll('[data-spectral-unavailable="1"]').forEach(function (button) {
+            if (button.dataset.spectralBound === '1') return;
+            button.dataset.spectralBound = '1';
+            button.addEventListener('click', function (event) {
                 event.preventDefault();
                 event.stopPropagation();
-                openChannel(card.getAttribute('data-native-channel'));
+                const message = 'This channel is still synchronizing with Jellyfin Live TV. It will become playable automatically after the guide refresh finishes.';
+                if (window.Dashboard && typeof window.Dashboard.alert === 'function') {
+                    window.Dashboard.alert(message);
+                } else {
+                    window.alert(message);
+                }
             });
         });
     }
@@ -389,7 +369,9 @@
 
             bridge.spectralChannelCount = spectralChannels.length;
             bridge.nativeChannelCount = nativeChannels.length;
-            bridge.matchedChannelCount = list.filter(function (channel) { return !!channel.nativeChannel; }).length;
+            bridge.matchedChannelCount = list.filter(function (channel) {
+                return !!read(channel, 'LiveTvItemId', 'liveTvItemId');
+            }).length;
 
             ensureStyles();
             let html = '<div class="sectionTitleContainer sectionTitleContainer-cards padded-left"><h2 class="sectionTitle sectionTitle-cards">Channels</h2></div>';

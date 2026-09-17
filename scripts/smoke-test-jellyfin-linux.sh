@@ -52,6 +52,24 @@ else:
 PY
 }
 
+json_array_field_for_name() {
+  python3 - "$1" "$2" "$3" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    values = json.load(handle)
+for value in values:
+    if value.get("name") == sys.argv[2]:
+        result = value.get(sys.argv[3])
+        if isinstance(result, bool):
+            print("true" if result else "false")
+        elif result is not None:
+            print(result)
+        break
+PY
+}
+
 mkdir -p "$workdir/config/plugins/Spectral TV_test"
 unzip -q "$artifact" -d "$workdir/config/plugins/Spectral TV_test"
 
@@ -225,6 +243,34 @@ if [[ "$settings_code" != "200" ]]; then
   fail_with_logs "Could not set the ephemeral Spectral TV server address (HTTP $settings_code)." "$settings_body"
 fi
 
+# Create a channel through the same API used by Channel Studio, then prove the viewer-facing
+# Home catalog returns that real record. This prevents a placeholder or the unrelated on-demand
+# collection from satisfying the Channels row smoke test.
+created_channel="$workdir/created-channel.json"
+created_channel_code=$(curl -sS -o "$created_channel" -w '%{http_code}' --max-time 8 \
+  -X POST "$base_url/SpectralTV/api/channels" \
+  -H "Authorization: $auth_header" \
+  -H 'Content-Type: application/json' \
+  --data '{"number":101,"name":"Spectral CI Channel","enabled":true,"aspectRatio":0,"scanlinesEnabled":false,"bugPlacement":0}' || true)
+if [[ "$created_channel_code" != "201" ]]; then
+  fail_with_logs "Could not create the Spectral channel used by the Home-row integration test (HTTP $created_channel_code)." "$created_channel"
+fi
+created_channel_id=$(json_field "$created_channel" "id")
+if [[ -z "$created_channel_id" ]]; then
+  fail_with_logs "The channel create response contained no channel id." "$created_channel"
+fi
+
+viewer_channels="$workdir/viewer-channels.json"
+viewer_channels_code=$(curl -sS -o "$viewer_channels" -w '%{http_code}' --max-time 8 \
+  "$base_url/SpectralTV/api/viewer/channels" \
+  -H "Authorization: $auth_header" || true)
+if [[ "$viewer_channels_code" != "200" ]]; then
+  fail_with_logs "The Channels Home catalog returned HTTP $viewer_channels_code instead of 200." "$viewer_channels"
+fi
+if [[ "$(json_array_field_for_name "$viewer_channels" "Spectral CI Channel" "number")" != "101" ]]; then
+  fail_with_logs "The Channels Home catalog did not return the real channel created in Channel Studio." "$viewer_channels"
+fi
+
 # Exercise the actual one-click mutation. This validates Jellyfin's M3U tuner manager,
 # XMLTV listings manager, Spectral ownership logic, plugin configuration persistence, and
 # the generated M3U endpoint together instead of merely proving the controller resolves.
@@ -242,6 +288,26 @@ first_tuner_id=$(json_field "$connect_one" "tunerId")
 first_provider_id=$(json_field "$connect_one" "listingsProviderId")
 if [[ -z "$first_tuner_id" || -z "$first_provider_id" ]]; then
   fail_with_logs "Spectral TV registration did not return native tuner/provider IDs." "$connect_one"
+fi
+
+# Channel creation queues a native guide refresh. Poll the Home catalog until the Spectral
+# channel is mapped to Jellyfin's real TvChannel item; the browser needs this id for normal
+# Jellyfin playback rather than the old generic Live TV placeholder.
+live_tv_item_id=""
+for _ in $(seq 1 60); do
+  viewer_channels_code=$(curl -sS -o "$viewer_channels" -w '%{http_code}' --max-time 8 \
+    "$base_url/SpectralTV/api/viewer/channels" \
+    -H "Authorization: $auth_header" || true)
+  if [[ "$viewer_channels_code" == "200" ]]; then
+    live_tv_item_id=$(json_array_field_for_name "$viewer_channels" "Spectral CI Channel" "liveTvItemId")
+    if [[ -n "$live_tv_item_id" ]]; then
+      break
+    fi
+  fi
+  sleep 2
+done
+if [[ -z "$live_tv_item_id" ]]; then
+  fail_with_logs "The created Spectral channel never appeared as a native Jellyfin Live TV item." "$viewer_channels"
 fi
 
 # Call Connect a second time. Idempotency requires the exact same Jellyfin objects to be

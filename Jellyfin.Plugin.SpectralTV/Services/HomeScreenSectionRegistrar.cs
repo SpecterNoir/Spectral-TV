@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.SpectralTV.Services;
 
 /// <summary>
-/// Registers Spectral TV's on-demand channel row with the optional Home Screen Sections plugin.
+/// Registers Spectral TV's live channel row with the optional Home Screen Sections plugin.
 /// The integration is discovered at runtime through reflection so Spectral TV never takes a hard
 /// dependency on Home Screen Sections and Jellyfin remains fully usable when that plugin is absent.
 /// </summary>
@@ -73,7 +73,7 @@ public sealed class HomeScreenSectionRegistrar : BackgroundService
         }
 
         _logger.LogInformation(
-            "Home Screen Sections was not available; Spectral TV on-demand channels will continue to use their normal Jellyfin playlist fallback");
+            "Home Screen Sections was not available; Spectral TV Channels will continue to use the built-in Jellyfin Web bridge");
     }
 
     private bool TryRegister(Assembly homeScreenAssembly)
@@ -109,7 +109,7 @@ public sealed class HomeScreenSectionRegistrar : BackgroundService
             id = ChannelsSectionId,
             displayText = "Channels",
             limit = 1,
-            additionalData = "spectral-tv-on-demand",
+            additionalData = "spectral-tv-live-channels",
             resultsAssembly = typeof(ChannelsHomeSectionResults).Assembly.FullName,
             resultsClass = typeof(ChannelsHomeSectionResults).FullName,
             resultsMethod = nameof(ChannelsHomeSectionResults.GetResults)

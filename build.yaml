@@ -47,12 +47,14 @@ artifacts:
   - "runtimes/linux-musl-arm64/native/libe_sqlite3.so"
   - "runtimes/linux-musl-arm/native/libe_sqlite3.so"
 changelog: |-
-  - Replace the Home row's experimental OnDemandChannels/playlist source with the same enabled Channels table used by Channel Studio, M3U, XMLTV, and Spectral live playout
-  - Resolve every Spectral channel against Jellyfin's native LiveTv/Channels items so Home cards open the native Live TV channel instead of creating a private playlist
-  - Render configured channel logos, channel numbers, and current-program titles in the Channels row, with Spectral playout metadata as a fallback while Jellyfin guide data catches up
-  - Refresh the Channels row periodically and after Jellyfin navigation/visibility changes so newly created or edited channels do not remain hidden behind a stale first render
+  - Make the Channels Home row display the enabled always-on channels created in Spectral TV instead of a separate placeholder/on-demand channel store
+  - Map every Spectral stream to its exact native Jellyfin Live TV item so channel cards use normal Jellyfin playback
+  - Show channel numbers, logos, current-program titles, schedule state, and Live TV synchronization state in the Home row
+  - Refresh the Channels row periodically so newly created, edited, enabled, or disabled channels appear without reinstalling the plugin
+  - Return real Live TV channel cards through the optional Home Screen Sections integration instead of private on-demand playlists
+  - Automatically refresh Jellyfin's Live TV guide after channel creation, editing, or deletion, and self-heal when the Home row detects missing native channel items
   - Add runtime diagnostics for Spectral channel count, Jellyfin native Live TV count, and matched-channel count to make future channel-discovery failures immediately visible
-  - Gate releases against any regression back to SpectralTV/api/viewer/on-demand and require the delivered bridge to query both the real viewer/channels endpoint and Jellyfin LiveTv/Channels
+  - Gate releases against regressions to the obsolete on-demand source, name-based channel matching, placeholder navigation, or non-playable Home cards
   - Load the Channels Home bridge as an external, cache-busted plugin asset so browser execution is observable and independent from large inline-script injection
   - Persist Channels directly in Jellyfin 12's native per-user homesection preference instead of racing Jellyfin's asynchronous save with a duplicate Spectral setting
   - Migrate any Channels placement saved by builds 0.0.3.125 through 0.0.3.135 into the native Jellyfin Home preference automatically

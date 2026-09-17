@@ -267,6 +267,22 @@ selects = "".join(
 target.write_text(
     '<!doctype html><html><head><meta charset="utf-8"></head><body>'
     f'<form>{selects}<button type="submit">Save</button></form>'
+    '<div class="homeSectionsContainer"><div class="section0"></div></div>'
+    '<script>'
+    'window.ApiClient={'
+    'getCurrentUserId:function(){return "smoke-user";},'
+    'getUrl:function(path){return path;},'
+    'setRequestHeaders:function(){},'
+    'serverId:function(){return "smoke-server";}'
+    '};'
+    'window.fetch=async function(url){'
+    'var value=String(url).indexOf("home-section")>=0'
+    '?{sectionIndex:0}'
+    ':[{id:"11111111-1111-1111-1111-111111111111",number:"101",name:"Spectral CI Channel",'
+    'currentTitle:"CI Program",scheduleReady:true,liveTvItemId:"22222222-2222-2222-2222-222222222222"}];'
+    'return {ok:true,status:200,statusText:"OK",text:async function(){return JSON.stringify(value);}};'
+    '};'
+    '</script>'
     f'<script defer src="{script_url}"></script>'
     '</body></html>',
     encoding='utf-8')
@@ -287,6 +303,16 @@ if [[ "$option_count" != "10" ]]; then
   fail_with_logs "The real browser DOM contained $option_count Channels options instead of 10." "$browser_dom"
 fi
 
+if ! grep -Fq 'Spectral CI Channel' "$browser_dom" \
+  || ! grep -Fq 'data-type="TvChannel"' "$browser_dom" \
+  || ! grep -Fq 'data-action="play"' "$browser_dom"; then
+  fail_with_logs "The real browser DOM did not render the configured channel as a playable Jellyfin TvChannel card." "$browser_dom"
+fi
+
+if grep -Fq 'Spectral On Demand' "$browser_dom"; then
+  fail_with_logs "The Channels Home row regressed to the unrelated on-demand collection." "$browser_dom"
+fi
+
 docker logs "$container" >"$logfile" 2>&1 || true
 if ! grep -Fq 'Jellyfin Web requested the Spectral TV Channels Home bridge' "$logfile"; then
   fail_with_logs "The external Channels script was not requested from Spectral TV during the browser test."
@@ -296,4 +322,4 @@ if grep -Eiq 'BadImageFormatException|Disabling plugin.*Spectral|Spectral TV.*Di
   fail_with_logs "Spectral TV produced a fatal signature during the Channels web-injection smoke test."
 fi
 
-echo "Spectral TV Channels real-channel API agreement, loader, asset endpoint, and browser DOM smoke test passed."
+echo "Spectral TV Channels loader, configured-channel catalog, playable card, and real browser DOM smoke test passed."
