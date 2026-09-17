@@ -23,4 +23,17 @@ public class PluginConfiguration : BasePluginConfiguration
     /// Jellyfin XMLTV provider created or adopted by the explicit Spectral TV connection workflow.
     /// </summary>
     public string? LiveTvListingsProviderId { get; set; }
+
+    /// <summary>
+    /// Per-user Jellyfin Home slot reserved for the Spectral Channels row. Jellyfin only accepts
+    /// built-in homesection values, so this mapping must live outside its native preference fields.
+    /// </summary>
+    public List<ChannelsHomeSectionPreference> ChannelsHomeSections { get; set; } = [];
+}
+
+public sealed class ChannelsHomeSectionPreference
+{
+    public string UserId { get; set; } = string.Empty;
+
+    public int SectionIndex { get; set; }
 }

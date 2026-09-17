@@ -261,29 +261,49 @@ from pathlib import Path
 target = Path(sys.argv[1])
 script_url = html.escape(sys.argv[2], quote=True)
 selects = "".join(
-    f'<select id="selectHomeSection{index}"><option value="resume">Continue Watching</option><option value="none">None</option></select>'
+    f'<select id="selectHomeSection{index}"><option value="resume">Continue Watching</option><option value="livetv">Live TV</option><option value="none">None</option></select>'
     for index in range(1, 11)
 )
+sections = "".join(f'<div class="section{index}"></div>' for index in range(10))
 target.write_text(
     '<!doctype html><html><head><meta charset="utf-8"></head><body>'
     f'<form>{selects}<button type="submit">Save</button></form>'
-    '<div class="homeSectionsContainer"><div class="section0"></div></div>'
+    f'<div class="homeSectionsContainer">{sections}</div>'
     '<script>'
+    'var selectedSection=0;var liveTvConnected=false;'
     'window.ApiClient={'
     'getCurrentUserId:function(){return "smoke-user";},'
     'getUrl:function(path){return path;},'
     'setRequestHeaders:function(){},'
     'serverId:function(){return "smoke-server";}'
     '};'
-    'window.fetch=async function(url){'
-    'var value=String(url).indexOf("home-section")>=0'
-    '?{sectionIndex:0}'
-    ':[{id:"11111111-1111-1111-1111-111111111111",number:"101",name:"Spectral CI Channel",'
-    'currentTitle:"CI Program",scheduleReady:true,liveTvItemId:"22222222-2222-2222-2222-222222222222"}];'
-    'return {ok:true,status:200,statusText:"OK",text:async function(){return JSON.stringify(value);}};'
+    'window.fetch=async function(url,options){'
+    'var path=String(url);var method=String(options&&options.method||"GET").toUpperCase();var value=null;var status=200;'
+    'if(path.indexOf("home-section")>=0){'
+    'if(method==="POST"){var body=JSON.parse(options.body);selectedSection=body.sectionIndex;'
+    'document.documentElement.dataset.savedSection=String(selectedSection);status=204;}'
+    'else{value={sectionIndex:selectedSection};}'
+    '}else if(path.indexOf("setup/livetv")>=0){liveTvConnected=true;'
+    'document.documentElement.dataset.setupCalled="1";value={connected:true};'
+    '}else if(path.indexOf("LiveTv/Channels")>=0){value={Items:[]};'
+    '}else if(path.indexOf("viewer/channels")>=0){value=[{id:"11111111-1111-1111-1111-111111111111",'
+    'number:"101",name:"Spectral CI Channel",currentTitle:"CI Program",scheduleReady:true,'
+    'liveTvItemId:liveTvConnected?"22222222-2222-2222-2222-222222222222":null}];'
+    '}else{value={};}'
+    'return {ok:true,status:status,statusText:"OK",text:async function(){return status===204?"":JSON.stringify(value);}};'
     '};'
+    'window.addEventListener("hashchange",function(){document.documentElement.dataset.openedChannel=window.location.hash;});'
+    'document.querySelector("form").addEventListener("submit",function(event){event.preventDefault();'
+    'document.documentElement.dataset.nativeSlotValue=document.getElementById("selectHomeSection2").value;});'
     '</script>'
     f'<script defer src="{script_url}"></script>'
+    '<script>window.setTimeout(function(){'
+    'var button=document.querySelector(".spectralTvChannelButton");if(button)button.click();'
+    '},800);window.setTimeout(function(){'
+    'var select=document.getElementById("selectHomeSection2");select.value="spectraltvchannels";'
+    'select.dispatchEvent(new Event("change",{bubbles:true}));'
+    'document.querySelector("form").dispatchEvent(new Event("submit",{bubbles:true,cancelable:true}));'
+    '},1400);</script>'
     '</body></html>',
     encoding='utf-8')
 PY
@@ -294,13 +314,23 @@ PY
   --disable-gpu \
   --allow-file-access-from-files \
   --user-data-dir="$workdir/chrome-profile" \
-  --virtual-time-budget=3000 \
+  --virtual-time-budget=5000 \
   --dump-dom "file://$browser_html" >"$browser_dom" 2>"$workdir/chrome.log" || \
   fail_with_logs "Chromium could not execute the Spectral TV Channels bridge."
 
 option_count=$( (grep -o 'option value="spectraltvchannels"' "$browser_dom" || true) | wc -l | tr -d ' ')
 if [[ "$option_count" != "10" ]]; then
   fail_with_logs "The real browser DOM contained $option_count Channels options instead of 10." "$browser_dom"
+fi
+
+if ! grep -Fq 'data-saved-section="1"' "$browser_dom" \
+  || ! grep -Fq 'data-native-slot-value="livetv"' "$browser_dom"; then
+  fail_with_logs "The browser bridge did not persist Channels separately while saving a valid native Live TV anchor." "$browser_dom"
+fi
+
+if ! grep -Fq 'data-setup-called="1"' "$browser_dom" \
+  || ! grep -Fq 'data-opened-channel="#/details?id=22222222-2222-2222-2222-222222222222&amp;serverId=smoke-server"' "$browser_dom"; then
+  fail_with_logs "Clicking an unsynchronized channel did not connect Jellyfin Live TV and open the imported native channel." "$browser_dom"
 fi
 
 if ! grep -Fq 'Spectral CI Channel' "$browser_dom" \
@@ -322,4 +352,4 @@ if grep -Eiq 'BadImageFormatException|Disabling plugin.*Spectral|Spectral TV.*Di
   fail_with_logs "Spectral TV produced a fatal signature during the Channels web-injection smoke test."
 fi
 
-echo "Spectral TV Channels loader, configured-channel catalog, playable card, and real browser DOM smoke test passed."
+echo "Spectral TV Channels loader, durable Home placement, self-connecting playback, and real browser DOM smoke test passed."

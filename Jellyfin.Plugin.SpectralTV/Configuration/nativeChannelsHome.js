@@ -7,6 +7,7 @@
     const SECTION_LABEL = 'Channels';
     const SETTINGS_ENDPOINT = 'SpectralTV/api/viewer/home-section';
     const CHANNELS_ENDPOINT = 'SpectralTV/api/viewer/channels';
+    const LIVE_TV_SETUP_ENDPOINT = 'SpectralTV/api/setup/livetv';
     const SELECT_PREFIX = 'selectHomeSection';
     const MAX_SECTIONS = 10;
     const RENDER_CACHE_MS = 10000;
@@ -28,6 +29,9 @@
     let renderGeneration = 0;
     let scheduled = false;
     let lastRenderAt = 0;
+    let nativeSaveInProgress = false;
+    let selectionSaveSequence = Promise.resolve();
+    const channelActivationPromises = new Map();
 
     function apiClient() {
         return window.ApiClient || null;
@@ -118,7 +122,25 @@
         return index >= 0 ? index : null;
     }
 
+    function persistSelection(index) {
+        const value = Number.isInteger(index) ? index : null;
+        selectionSaveSequence = selectionSaveSequence
+            .catch(function () { })
+            .then(function () {
+                return apiJson(SETTINGS_ENDPOINT, {
+                    method: 'POST',
+                    body: { sectionIndex: value }
+                });
+            })
+            .catch(function (error) {
+                bridge.lastError = String(error && error.message ? error.message : error);
+                console.warn('[Spectral TV] Could not save the Channels home position.', error);
+            });
+        return selectionSaveSequence;
+    }
+
     function onHomeSectionChange(selects, changedSelect) {
+        nativeSaveInProgress = false;
         settingsRevision++;
         if (changedSelect.value === SECTION_VALUE) {
             for (const other of selects) {
@@ -129,6 +151,7 @@
         selectedIndex = selectedIndexFrom(selects);
         settingsLoadedForUser = currentUserId();
         lastRenderAt = 0;
+        void persistSelection(selectedIndex);
     }
 
     function bindHomeSettings(selects) {
@@ -148,6 +171,17 @@
                 selectedIndex = selectedIndexFrom(getHomeSelects());
                 settingsLoadedForUser = currentUserId();
                 lastRenderAt = 0;
+                nativeSaveInProgress = true;
+                void persistSelection(selectedIndex);
+
+                // Jellyfin only accepts its built-in homesection values. Reserve the selected
+                // slot with Live TV while the separate Spectral preference remembers its meaning.
+                if (Number.isInteger(selectedIndex)) {
+                    const selected = getHomeSelects()[selectedIndex];
+                    if (selected) {
+                        selected.value = selected.querySelector('option[value="livetv"]') ? 'livetv' : 'none';
+                    }
+                }
             }, true);
         }
     }
@@ -169,6 +203,8 @@
 
         bindHomeSettings(selects);
         bridge.settingsPatched = true;
+
+        if (nativeSaveInProgress) return true;
 
         const domIndex = selectedIndexFrom(selects);
         if (Number.isInteger(domIndex)) {
@@ -288,7 +324,7 @@
             ? ''
             : '<div class="cardText cardTextCentered spectralTvChannelStatus"><bdi>Synchronizing with Jellyfin Live TV…</bdi></div>';
 
-        return '<div class="card overflowBackdropCard card-hoverable spectralTvChannelCard" data-spectral-channel="' + escapeHtml(channel.id || '') + '"' + itemAttributes + '>' +
+        return '<div class="card overflowBackdropCard card-hoverable spectralTvChannelCard" data-spectral-channel="' + escapeHtml(channel.id || '') + '" data-native-channel="' + escapeHtml(nativeId) + '"' + itemAttributes + '>' +
             '<div class="cardBox cardBox-bottompadded">' +
                 '<div class="cardScalable">' +
                     '<div class="cardPadder cardPadder-overflowBackdrop"></div>' +
@@ -312,23 +348,105 @@
             '.spectralTvChannelTileName{font-size:1.35em;font-weight:600;text-align:center;padding:1em;line-height:1.15;}\n' +
             '.spectralTvChannelNumber{position:absolute;left:.55em;bottom:.45em;padding:.15em .4em;border-radius:.25em;background:rgba(0,0,0,.72);font-size:.82em;font-weight:600;}\n' +
             '.spectralTvChannelStatus{color:#f59e0b;font-size:.82em;}\n' +
-            '.spectralTvChannelUnavailable{cursor:not-allowed;opacity:.82;}\n' +
+            '.spectralTvChannelUnavailable{opacity:.82;}\n' +
             '.spectralTvChannelsMessage{padding-left:3.3%;opacity:.8;}\n';
         document.head.appendChild(style);
     }
 
-    function bindChannelClicks(container) {
-        container.querySelectorAll('[data-spectral-unavailable="1"]').forEach(function (button) {
-            if (button.dataset.spectralBound === '1') return;
-            button.dataset.spectralBound = '1';
-            button.addEventListener('click', function (event) {
-                event.preventDefault();
-                event.stopPropagation();
-                const message = 'This channel is still synchronizing with Jellyfin Live TV. It will become playable automatically after the guide refresh finishes.';
+    function openNativeChannel(nativeChannelId) {
+        const api = apiClient();
+        const serverId = api && typeof api.serverId === 'function' ? api.serverId() : '';
+        window.location.hash = '#/details?id=' + encodeURIComponent(nativeChannelId)
+            + '&serverId=' + encodeURIComponent(serverId);
+    }
+
+    function setChannelStatus(card, message) {
+        let status = card.querySelector('.spectralTvChannelStatus');
+        if (!status) {
+            status = document.createElement('div');
+            status.className = 'cardText cardTextCentered spectralTvChannelStatus';
+            card.querySelector('.cardBox')?.appendChild(status);
+        }
+        status.textContent = message;
+    }
+
+    async function activateChannel(card) {
+        const channelId = card.getAttribute('data-spectral-channel');
+        if (!channelId) return;
+        if (channelActivationPromises.has(channelId)) return channelActivationPromises.get(channelId);
+
+        const activation = (async function () {
+            const button = card.querySelector('.spectralTvChannelButton');
+            if (button) button.disabled = true;
+            setChannelStatus(card, 'Connecting to Jellyfin Live TV…');
+
+            try {
+                await apiJson(LIVE_TV_SETUP_ENDPOINT, { method: 'POST' });
+                setChannelStatus(card, 'Synchronizing with Jellyfin Live TV…');
+
+                for (let attempt = 0; attempt < 45; attempt++) {
+                    if (attempt > 0) {
+                        await new Promise(function (resolve) { window.setTimeout(resolve, 2000); });
+                    }
+
+                    const channels = await apiJson(CHANNELS_ENDPOINT);
+                    const match = (Array.isArray(channels) ? channels : []).find(function (channel) {
+                        return String(read(channel, 'Id', 'id') || '').replace(/-/g, '').toLowerCase()
+                            === String(channelId).replace(/-/g, '').toLowerCase();
+                    });
+                    const nativeId = read(match, 'LiveTvItemId', 'liveTvItemId');
+                    if (nativeId) {
+                        card.setAttribute('data-native-channel', nativeId);
+                        card.setAttribute('data-id', nativeId);
+                        card.setAttribute('data-serverid', apiClient() && typeof apiClient().serverId === 'function' ? apiClient().serverId() : '');
+                        card.setAttribute('data-type', 'TvChannel');
+                        card.setAttribute('data-mediatype', 'Video');
+                        card.setAttribute('data-isfolder', 'false');
+                        if (button) {
+                            button.classList.remove('spectralTvChannelUnavailable');
+                            button.classList.add('itemAction');
+                            button.setAttribute('data-action', 'play');
+                            button.removeAttribute('data-spectral-unavailable');
+                        }
+                        card.querySelector('.spectralTvChannelStatus')?.remove();
+                        openNativeChannel(nativeId);
+                        return;
+                    }
+                }
+
+                throw new Error('Jellyfin did not import the channel before the synchronization timeout.');
+            } catch (error) {
+                bridge.lastError = String(error && error.message ? error.message : error);
+                setChannelStatus(card, 'Could not connect this channel to Jellyfin Live TV');
+                const message = 'Spectral TV could not make this channel playable. Open Spectral TV’s Connect Live TV page once, then try again.\n\n' + bridge.lastError;
                 if (window.Dashboard && typeof window.Dashboard.alert === 'function') {
                     window.Dashboard.alert(message);
                 } else {
                     window.alert(message);
+                }
+            } finally {
+                if (button) button.disabled = false;
+                channelActivationPromises.delete(channelId);
+            }
+        })();
+
+        channelActivationPromises.set(channelId, activation);
+        return activation;
+    }
+
+    function bindChannelClicks(container) {
+        container.querySelectorAll('.spectralTvChannelCard').forEach(function (card) {
+            const button = card.querySelector('.spectralTvChannelButton');
+            if (!button || button.dataset.spectralBound === '1') return;
+            button.dataset.spectralBound = '1';
+            button.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                const nativeId = card.getAttribute('data-native-channel');
+                if (nativeId) {
+                    openNativeChannel(nativeId);
+                } else {
+                    void activateChannel(card);
                 }
             });
         });
@@ -440,8 +558,14 @@
         }
 
         observer.observe(document.body, { childList: true, subtree: true });
-        window.addEventListener('hashchange', function () { schedule(0, true); });
-        window.addEventListener('pageshow', function () { schedule(0, true); });
+        window.addEventListener('hashchange', function () {
+            nativeSaveInProgress = false;
+            schedule(0, true);
+        });
+        window.addEventListener('pageshow', function () {
+            nativeSaveInProgress = false;
+            schedule(0, true);
+        });
         document.addEventListener('visibilitychange', function () {
             if (!document.hidden) schedule(0, true);
         });

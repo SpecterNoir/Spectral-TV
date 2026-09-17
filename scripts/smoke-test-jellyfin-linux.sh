@@ -198,9 +198,9 @@ if [[ -z "$access_token" ]]; then
 fi
 auth_header="$auth_identity, Token=\"$access_token\""
 
-# Round-trip the Channels row through Jellyfin's native homesection preferences. This
-# catches display-preference client/key mismatches that a controller-only startup test
-# cannot see and guarantees the compatibility endpoint writes what the browser reads.
+# Round-trip the Channels row through Spectral's own per-user configuration.
+# Jellyfin does not preserve unknown native homesection values, so the controller keeps
+# Spectral's slot index outside those fields and reserves the native slot with Live TV.
 home_section_set="$workdir/home-section-set.json"
 home_section_set_code=$(curl -sS -o "$home_section_set" -w '%{http_code}' --max-time 8 \
   -X POST "$base_url/SpectralTV/api/viewer/home-section" \
@@ -219,7 +219,26 @@ if [[ "$home_section_get_code" != "200" ]]; then
   fail_with_logs "Could not reload the Spectral TV Channels Home slot (HTTP $home_section_get_code)." "$home_section_get"
 fi
 if [[ "$(json_field "$home_section_get" "sectionIndex")" != "3" ]]; then
-  fail_with_logs "The Spectral TV Channels Home slot did not survive a native Jellyfin preference round trip." "$home_section_get"
+  fail_with_logs "The Spectral TV Channels Home slot did not survive its per-user preference round trip." "$home_section_get"
+fi
+
+# Prove the mapping is serialized by Spectral itself rather than surviving only in process memory.
+# This reproduces the user's refresh/reload failure at a stronger server-restart boundary.
+docker restart "$container" >/dev/null
+home_section_restarted="$workdir/home-section-restarted.json"
+home_section_restarted_code=""
+for _ in $(seq 1 60); do
+  home_section_restarted_code=$(curl -sS -o "$home_section_restarted" -w '%{http_code}' --max-time 5 \
+    "$base_url/SpectralTV/api/viewer/home-section" \
+    -H "Authorization: $auth_header" || true)
+  if [[ "$home_section_restarted_code" == "200" ]]; then
+    break
+  fi
+  sleep 2
+done
+if [[ "$home_section_restarted_code" != "200" \
+   || "$(json_field "$home_section_restarted" "sectionIndex")" != "3" ]]; then
+  fail_with_logs "The Spectral TV Channels Home slot did not survive a Jellyfin restart." "$home_section_restarted"
 fi
 
 home_section_clear="$workdir/home-section-clear.json"

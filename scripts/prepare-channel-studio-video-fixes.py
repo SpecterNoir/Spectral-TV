@@ -166,5 +166,10 @@ if "#/livetv?tab=2&serverId=" in channels_home:
     raise SystemExit("An unmatched card still sends viewers to the empty generic Live TV placeholder")
 if 'data-action="play"' not in channels_home or 'data-spectral-unavailable="1"' not in channels_home:
     raise SystemExit("Channels Home is missing native playback or synchronization-state behavior")
+if "const LIVE_TV_SETUP_ENDPOINT = 'SpectralTV/api/setup/livetv';" not in channels_home \
+        or "async function activateChannel(card)" not in channels_home:
+    raise SystemExit("An unsynchronized Channels card can no longer self-connect Jellyfin Live TV")
+if "function persistSelection(index)" not in channels_home or "nativeSaveInProgress" not in channels_home:
+    raise SystemExit("Channels Home is missing durable separate slot persistence")
 
-print("Prepared Channel Studio fixes, fresh diagnostics, self-repair, and native Channels playback guards.")
+print("Prepared Channel Studio fixes, durable Home placement, self-repair, and native Channels playback guards.")
