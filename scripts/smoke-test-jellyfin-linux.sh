@@ -42,7 +42,14 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     value = json.load(handle)
 for part in sys.argv[2].split('.'):
-    value = value[part]
+    if not isinstance(value, dict):
+        raise KeyError(part)
+    key = part if part in value else next(
+        (candidate for candidate in value if candidate.lower() == part.lower()),
+        None)
+    if key is None:
+        raise KeyError(part)
+    value = value[key]
 if isinstance(value, bool):
     print("true" if value else "false")
 elif value is None:
@@ -60,8 +67,10 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     values = json.load(handle)
 for value in values:
-    if value.get("name") == sys.argv[2]:
-        result = value.get(sys.argv[3])
+    name_key = next((key for key in value if key.lower() == "name"), None)
+    if name_key is not None and value.get(name_key) == sys.argv[2]:
+        field_key = next((key for key in value if key.lower() == sys.argv[3].lower()), None)
+        result = value.get(field_key) if field_key is not None else None
         if isinstance(result, bool):
             print("true" if result else "false")
         elif result is not None:
