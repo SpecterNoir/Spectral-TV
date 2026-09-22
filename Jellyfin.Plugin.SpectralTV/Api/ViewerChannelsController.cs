@@ -25,19 +25,22 @@ public sealed class ViewerChannelsController : ControllerBase
     private readonly IServerConfigurationManager _configurationManager;
     private readonly LiveTvIntegrationService _liveTvIntegration;
     private readonly PlayoutBuilderService _playoutBuilder;
+    private readonly ILogger<ViewerChannelsController> _logger;
 
     public ViewerChannelsController(
         SpectralTvDbContext db,
         ILibraryManager libraryManager,
         IServerConfigurationManager configurationManager,
         LiveTvIntegrationService liveTvIntegration,
-        PlayoutBuilderService playoutBuilder)
+        PlayoutBuilderService playoutBuilder,
+        ILogger<ViewerChannelsController> logger)
     {
         _db = db;
         _libraryManager = libraryManager;
         _configurationManager = configurationManager;
         _liveTvIntegration = liveTvIntegration;
         _playoutBuilder = playoutBuilder;
+        _logger = logger;
     }
 
     /// <summary>
@@ -78,7 +81,7 @@ public sealed class ViewerChannelsController : ControllerBase
         {
             // Keep the row visible while Jellyfin recovers; the missing native id below will cause
             // another debounced guide refresh instead of failing the whole Home page.
-            Console.WriteLine($"[Spectral TV] Live TV self-heal failed: {ex.Message}");
+            _logger.LogWarning(ex, "Spectral TV could not self-heal its native Live TV connection for the Channels row");
         }
 
         var channelIds = channels.Select(channel => channel.Id).ToArray();
