@@ -215,6 +215,45 @@ then
   fail_with_logs "The viewer Channels endpoint did not return the channel created through Channel Studio." "$viewer_channels"
 fi
 
+livetv_status="$workdir/livetv-status.json"
+livetv_status_code=$(curl -sS -o "$livetv_status" -w '%{http_code}' --max-time 8 \
+  "$base_url/SpectralTV/api/setup/livetv-status" \
+  -H "Authorization: $auth_header" || true)
+if [[ "$livetv_status_code" != "200" ]]; then
+  fail_with_logs "Spectral TV could not report its native Live TV status (HTTP $livetv_status_code)." "$livetv_status"
+fi
+if ! python3 - "$livetv_status" <<'PY'
+import json
+import sys
+from urllib.parse import urlparse
+
+with open(sys.argv[1], encoding='utf-8') as handle:
+    status = json.load(handle)
+
+def get_ci(obj, name):
+    if name in obj:
+        return obj[name]
+    key = next((candidate for candidate in obj if candidate.lower() == name.lower()), None)
+    return obj.get(key) if key is not None else None
+
+m3u = str(get_ci(status, 'm3uUrl') or '')
+xmltv = str(get_ci(status, 'xmlTvUrl') or '')
+if get_ci(status, 'connected') is not True:
+    raise SystemExit(f"Native Live TV was not self-connected: {status!r}")
+for value, suffix in (
+    (m3u, '/SpectralTV/iptv/channels.m3u'),
+    (xmltv, '/SpectralTV/iptv/epg.xml'),
+):
+    parsed = urlparse(value)
+    if parsed.hostname not in ('127.0.0.1', 'localhost', '::1'):
+        raise SystemExit(f"Native Live TV URL was not server-local: {value!r}")
+    if not parsed.path.endswith(suffix):
+        raise SystemExit(f"Native Live TV URL had the wrong endpoint: {value!r}")
+PY
+then
+  fail_with_logs "Spectral TV native Live TV self-connection did not use Jellyfin's local API URL." "$livetv_status"
+fi
+
 bridge_code=$(curl -sS -o "$bridge_js" -w '%{http_code}' --max-time 5 \
   "$base_url/SpectralTV/web/channels-home.js?v=smoke" || true)
 if [[ "$bridge_code" != "200" ]]; then
@@ -230,6 +269,14 @@ if ! grep -Fq "const CHANNELS_ENDPOINT = 'SpectralTV/api/viewer/channels';" "$br
 fi
 if ! grep -Fq "apiJson('LiveTv/Channels'" "$bridge_js"; then
   fail_with_logs "The Channels Home bridge is not resolving Spectral channels to Jellyfin native Live TV items." "$bridge_js"
+fi
+if ! grep -Fq 'data-spectral-channel-link="1"' "$bridge_js" \
+  || ! grep -Fq "window.Dashboard.navigate" "$bridge_js" \
+  || ! grep -Fq "stopImmediatePropagation" "$bridge_js"; then
+  fail_with_logs "The Channels bridge is missing its collision-proof real-link click handling." "$bridge_js"
+fi
+if grep -Fq "LIVE_TV_SETUP_ENDPOINT" "$bridge_js"; then
+  fail_with_logs "The browser bridge regressed to browser-side elevated Live TV setup." "$bridge_js"
 fi
 if grep -Fq 'SpectralTV/api/viewer/on-demand' "$bridge_js"; then
   fail_with_logs "The Channels Home bridge regressed to the obsolete on-demand playlist data source." "$bridge_js"
@@ -270,7 +317,7 @@ target.write_text(
     f'<form>{selects}<button type="submit">Save</button></form>'
     f'<div class="homeSectionsContainer">{sections}</div>'
     '<script>'
-    'var selectedSection=0;var liveTvConnected=false;'
+    'var selectedSection=0;var viewerCalls=0;'
     'window.ApiClient={'
     'getCurrentUserId:function(){return "smoke-user";},'
     'getUrl:function(path){return path;},'
@@ -283,16 +330,17 @@ target.write_text(
     'if(method==="POST"){var body=JSON.parse(options.body);selectedSection=body.sectionIndex;'
     'document.documentElement.dataset.savedSection=String(selectedSection);status=204;}'
     'else{value={sectionIndex:selectedSection};}'
-    '}else if(path.indexOf("setup/livetv")>=0){liveTvConnected=true;'
-    'document.documentElement.dataset.setupCalled="1";value={connected:true};'
     '}else if(path.indexOf("LiveTv/Channels")>=0){value={Items:[]};'
-    '}else if(path.indexOf("viewer/channels")>=0){value=[{id:"11111111-1111-1111-1111-111111111111",'
+    '}else if(path.indexOf("viewer/channels")>=0){viewerCalls++;value=[{id:"11111111-1111-1111-1111-111111111111",'
     'number:"101",name:"Spectral CI Channel",currentTitle:"CI Program",scheduleReady:true,'
-    'liveTvItemId:liveTvConnected?"22222222-2222-2222-2222-222222222222":null}];'
+    'liveTvItemId:viewerCalls>=2?"22222222-2222-2222-2222-222222222222":null}];'
     '}else{value={};}'
     'return {ok:true,status:status,statusText:"OK",text:async function(){return status===204?"":JSON.stringify(value);}};'
     '};'
     'window.addEventListener("hashchange",function(){document.documentElement.dataset.openedChannel=window.location.hash;});'
+    'document.addEventListener("click",function(event){'
+    'if(event.target.closest&&event.target.closest(".spectralTvChannelButton")){'
+    'document.documentElement.dataset.jellyfinBubbleHandler="ran";}});'
     'document.querySelector("form").addEventListener("submit",function(event){event.preventDefault();'
     'document.documentElement.dataset.nativeSlotValue=document.getElementById("selectHomeSection2").value;});'
     '</script>'
@@ -328,15 +376,18 @@ if ! grep -Fq 'data-saved-section="1"' "$browser_dom" \
   fail_with_logs "The browser bridge did not persist Channels separately while saving a valid native Live TV anchor." "$browser_dom"
 fi
 
-if ! grep -Fq 'data-setup-called="1"' "$browser_dom" \
-  || ! grep -Fq 'data-opened-channel="#/details?id=22222222-2222-2222-2222-222222222222&amp;serverId=smoke-server"' "$browser_dom"; then
-  fail_with_logs "Clicking an unsynchronized channel did not connect Jellyfin Live TV and open the imported native channel." "$browser_dom"
+if ! grep -Fq 'data-opened-channel="#/details?id=22222222-2222-2222-2222-222222222222&amp;serverId=smoke-server"' "$browser_dom"; then
+  fail_with_logs "Clicking an unsynchronized channel did not self-heal and open the imported native channel." "$browser_dom"
+fi
+
+if grep -Fq 'data-jellyfin-bubble-handler="ran"' "$browser_dom"; then
+  fail_with_logs "Jellyfin's competing bubble click handler received the Spectral channel click." "$browser_dom"
 fi
 
 if ! grep -Fq 'Spectral CI Channel' "$browser_dom" \
-  || ! grep -Fq 'data-type="TvChannel"' "$browser_dom" \
-  || ! grep -Fq 'data-action="play"' "$browser_dom"; then
-  fail_with_logs "The real browser DOM did not render the configured channel as a playable Jellyfin TvChannel card." "$browser_dom"
+  || ! grep -Fq 'data-spectral-channel-link="1"' "$browser_dom" \
+  || ! grep -Fq 'data-spectral-channels-index-link="1"' "$browser_dom"; then
+  fail_with_logs "The real browser DOM did not render real navigable Spectral channel/title links." "$browser_dom"
 fi
 
 if grep -Fq 'Spectral On Demand' "$browser_dom"; then
@@ -352,4 +403,4 @@ if grep -Eiq 'BadImageFormatException|Disabling plugin.*Spectral|Spectral TV.*Di
   fail_with_logs "Spectral TV produced a fatal signature during the Channels web-injection smoke test."
 fi
 
-echo "Spectral TV Channels loader, durable Home placement, self-connecting playback, and real browser DOM smoke test passed."
+echo "Spectral TV Channels local Live TV self-connection, collision-proof clicks, durable Home placement, and browser DOM smoke test passed."
