@@ -7,7 +7,6 @@
     const SECTION_LABEL = 'Channels';
     const SETTINGS_ENDPOINT = 'SpectralTV/api/viewer/home-section';
     const CHANNELS_ENDPOINT = 'SpectralTV/api/viewer/channels';
-    const LIVE_TV_SETUP_ENDPOINT = 'SpectralTV/api/setup/livetv';
     const SELECT_PREFIX = 'selectHomeSection';
     const MAX_SECTIONS = 10;
     const RENDER_CACHE_MS = 10000;
@@ -297,10 +296,40 @@
         return channel.currentTitle || '';
     }
 
+    function currentServerId() {
+        const api = apiClient();
+        return api && typeof api.serverId === 'function' ? api.serverId() : '';
+    }
+
+    function channelsPageHref() {
+        return '#/livetv?tab=2&serverId=' + encodeURIComponent(currentServerId());
+    }
+
+    function channelDetailsHref(nativeChannelId) {
+        return '#/details?id=' + encodeURIComponent(nativeChannelId)
+            + '&serverId=' + encodeURIComponent(currentServerId());
+    }
+
+    function navigateTo(href) {
+        if (window.Dashboard && typeof window.Dashboard.navigate === 'function') {
+            return window.Dashboard.navigate(href);
+        }
+
+        window.location.hash = href.startsWith('#') ? href : ('#/' + String(href).replace(/^\/+/, ''));
+        return Promise.resolve();
+    }
+
+    function sectionHeaderHtml() {
+        return '<div class="sectionTitleContainer sectionTitleContainer-cards padded-left">' +
+            '<a class="sectionTitleTextButton spectralTvChannelsTitleLink" data-spectral-channels-index-link="1" href="' +
+            escapeHtml(channelsPageHref()) + '" aria-label="Open Channels">' +
+            '<h2 class="sectionTitle sectionTitle-cards">Channels</h2>' +
+            '</a></div>';
+    }
+
     function channelCard(channel) {
         const nativeChannel = channel.nativeChannel;
         const nativeId = read(channel, 'LiveTvItemId', 'liveTvItemId') || read(nativeChannel, 'Id', 'id') || '';
-        const serverId = apiClient() && typeof apiClient().serverId === 'function' ? apiClient().serverId() : '';
         const name = escapeHtml(channel.name || read(nativeChannel, 'Name', 'name') || 'Channel');
         const number = escapeHtml(channel.number || read(nativeChannel, 'ChannelNumber', 'channelNumber') || '');
         const currentTitle = currentProgramTitle(channel, nativeChannel);
@@ -314,23 +343,24 @@
         const image = imageUrl
             ? '<img class="spectralTvChannelLogo" src="' + escapeHtml(imageUrl) + '" alt="" loading="lazy" />'
             : '<span class="spectralTvChannelTileName">' + name + '</span>';
-        const itemAttributes = nativeId
-            ? ' data-id="' + escapeHtml(nativeId) + '" data-serverid="' + escapeHtml(serverId) + '" data-type="TvChannel" data-mediatype="Video" data-isfolder="false"'
-            : '';
-        const buttonAttributes = nativeId
-            ? ' class="cardImageContainer coveredImage cardContent spectralTvChannelButton itemAction" data-action="play"'
-            : ' class="cardImageContainer coveredImage cardContent spectralTvChannelButton spectralTvChannelUnavailable" data-spectral-unavailable="1"';
+        const href = nativeId ? channelDetailsHref(nativeId) : channelsPageHref();
+        const unavailableClass = nativeId ? '' : ' spectralTvChannelUnavailable';
         const status = nativeId
             ? ''
-            : '<div class="cardText cardTextCentered spectralTvChannelStatus"><bdi>Synchronizing with Jellyfin Live TV…</bdi></div>';
+            : '<div class="cardText cardTextCentered spectralTvChannelStatus"><bdi>Preparing Jellyfin Live TV…</bdi></div>';
 
-        return '<div class="card overflowBackdropCard card-hoverable spectralTvChannelCard" data-spectral-channel="' + escapeHtml(channel.id || '') + '" data-native-channel="' + escapeHtml(nativeId) + '"' + itemAttributes + '>' +
+        // Use a real anchor for a no-JavaScript fallback, but keep Spectral's own capture-phase
+        // handler in control. Do not add Jellyfin's itemAction class here: the real web client has
+        // global itemAction delegation that can race plugin listeners inside emby-itemscontainer.
+        return '<div class="card overflowBackdropCard card-hoverable spectralTvChannelCard" data-spectral-channel="' +
+            escapeHtml(channel.id || '') + '" data-native-channel="' + escapeHtml(nativeId) + '">' +
             '<div class="cardBox cardBox-bottompadded">' +
                 '<div class="cardScalable">' +
                     '<div class="cardPadder cardPadder-overflowBackdrop"></div>' +
-                    '<button type="button"' + buttonAttributes + ' aria-label="Play ' + name + '">' +
+                    '<a class="cardImageContainer coveredImage cardContent spectralTvChannelButton' + unavailableClass +
+                    '" data-spectral-channel-link="1" href="' + escapeHtml(href) + '" aria-label="Open ' + name + '">' +
                         image + numberText +
-                    '</button>' +
+                    '</a>' +
                 '</div>' +
                 '<div class="cardText cardTextCentered cardText-first"><bdi>' + name + '</bdi></div>' +
                 current + status +
@@ -343,21 +373,23 @@
         const style = document.createElement('style');
         style.id = 'spectralTvNativeChannelsStyles';
         style.textContent = '\n' +
-            '.spectralTvChannelButton{position:relative;border:0;width:100%;height:100%;padding:0;background:linear-gradient(145deg,rgba(42,44,55,.96),rgba(15,16,22,.98));color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;}\n' +
+            '.spectralTvChannelButton{position:relative;border:0;width:100%;height:100%;padding:0;background:linear-gradient(145deg,rgba(42,44,55,.96),rgba(15,16,22,.98));color:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;text-decoration:none;}\n' +
             '.spectralTvChannelLogo{width:82%;height:82%;object-fit:contain;display:block;}\n' +
             '.spectralTvChannelTileName{font-size:1.35em;font-weight:600;text-align:center;padding:1em;line-height:1.15;}\n' +
             '.spectralTvChannelNumber{position:absolute;left:.55em;bottom:.45em;padding:.15em .4em;border-radius:.25em;background:rgba(0,0,0,.72);font-size:.82em;font-weight:600;}\n' +
             '.spectralTvChannelStatus{color:#f59e0b;font-size:.82em;}\n' +
             '.spectralTvChannelUnavailable{opacity:.82;}\n' +
+            '.spectralTvChannelsTitleLink{color:inherit;text-decoration:none;cursor:pointer;}\n' +
             '.spectralTvChannelsMessage{padding-left:3.3%;opacity:.8;}\n';
         document.head.appendChild(style);
     }
 
     function openNativeChannel(nativeChannelId) {
-        const api = apiClient();
-        const serverId = api && typeof api.serverId === 'function' ? api.serverId() : '';
-        window.location.hash = '#/details?id=' + encodeURIComponent(nativeChannelId)
-            + '&serverId=' + encodeURIComponent(serverId);
+        return navigateTo(channelDetailsHref(nativeChannelId));
+    }
+
+    function openChannelsPage() {
+        return navigateTo(channelsPageHref());
     }
 
     function setChannelStatus(card, message) {
@@ -376,17 +408,16 @@
         if (channelActivationPromises.has(channelId)) return channelActivationPromises.get(channelId);
 
         const activation = (async function () {
-            const button = card.querySelector('.spectralTvChannelButton');
-            if (button) button.disabled = true;
-            setChannelStatus(card, 'Connecting to Jellyfin Live TV…');
+            const link = card.querySelector('[data-spectral-channel-link]');
+            if (link) link.setAttribute('aria-busy', 'true');
+            setChannelStatus(card, 'Preparing Jellyfin Live TV…');
 
             try {
-                await apiJson(LIVE_TV_SETUP_ENDPOINT, { method: 'POST' });
-                setChannelStatus(card, 'Synchronizing with Jellyfin Live TV…');
-
-                for (let attempt = 0; attempt < 45; attempt++) {
+                // The viewer endpoint performs server-side, idempotent Live TV self-healing.
+                // No browser-side elevated/admin request is required.
+                for (let attempt = 0; attempt < 30; attempt++) {
                     if (attempt > 0) {
-                        await new Promise(function (resolve) { window.setTimeout(resolve, 2000); });
+                        await new Promise(function (resolve) { window.setTimeout(resolve, 1000); });
                     }
 
                     const channels = await apiJson(CHANNELS_ENDPOINT);
@@ -397,35 +428,35 @@
                     const nativeId = read(match, 'LiveTvItemId', 'liveTvItemId');
                     if (nativeId) {
                         card.setAttribute('data-native-channel', nativeId);
-                        card.setAttribute('data-id', nativeId);
-                        card.setAttribute('data-serverid', apiClient() && typeof apiClient().serverId === 'function' ? apiClient().serverId() : '');
-                        card.setAttribute('data-type', 'TvChannel');
-                        card.setAttribute('data-mediatype', 'Video');
-                        card.setAttribute('data-isfolder', 'false');
-                        if (button) {
-                            button.classList.remove('spectralTvChannelUnavailable');
-                            button.classList.add('itemAction');
-                            button.setAttribute('data-action', 'play');
-                            button.removeAttribute('data-spectral-unavailable');
+                        if (link) {
+                            link.classList.remove('spectralTvChannelUnavailable');
+                            link.setAttribute('href', channelDetailsHref(nativeId));
+                            link.removeAttribute('aria-busy');
                         }
                         card.querySelector('.spectralTvChannelStatus')?.remove();
-                        openNativeChannel(nativeId);
+                        await openNativeChannel(nativeId);
                         return;
                     }
+
+                    setChannelStatus(card, attempt < 5
+                        ? 'Preparing Jellyfin Live TV…'
+                        : 'Waiting for Jellyfin to import this channel…');
                 }
 
-                throw new Error('Jellyfin did not import the channel before the synchronization timeout.');
+                throw new Error('Jellyfin did not import the native Live TV channel within 30 seconds.');
             } catch (error) {
                 bridge.lastError = String(error && error.message ? error.message : error);
-                setChannelStatus(card, 'Could not connect this channel to Jellyfin Live TV');
-                const message = 'Spectral TV could not make this channel playable. Open Spectral TV’s Connect Live TV page once, then try again.\n\n' + bridge.lastError;
+                setChannelStatus(card, 'Still synchronizing. Opening Jellyfin Channels…');
+                if (link) link.removeAttribute('aria-busy');
+
+                const message = 'Spectral TV is still synchronizing this channel with Jellyfin Live TV. ' +
+                    'The Channels page will open so the native lineup is visible while synchronization finishes.';
                 if (window.Dashboard && typeof window.Dashboard.alert === 'function') {
                     window.Dashboard.alert(message);
-                } else {
-                    window.alert(message);
                 }
+
+                await openChannelsPage();
             } finally {
-                if (button) button.disabled = false;
                 channelActivationPromises.delete(channelId);
             }
         })();
@@ -435,21 +466,38 @@
     }
 
     function bindChannelClicks(container) {
-        container.querySelectorAll('.spectralTvChannelCard').forEach(function (card) {
-            const button = card.querySelector('.spectralTvChannelButton');
-            if (!button || button.dataset.spectralBound === '1') return;
-            button.dataset.spectralBound = '1';
-            button.addEventListener('click', function (event) {
+        if (container.dataset.spectralTvClickCapture === '1') return;
+        container.dataset.spectralTvClickCapture = '1';
+
+        // Capture before Jellyfin's emby-itemscontainer/itemAction bubble handlers. This is the
+        // behavior the old synthetic smoke test did not model and is why real clicks could vanish.
+        container.addEventListener('click', function (event) {
+            const indexLink = event.target.closest('[data-spectral-channels-index-link]');
+            if (indexLink && container.contains(indexLink)) {
                 event.preventDefault();
                 event.stopPropagation();
-                const nativeId = card.getAttribute('data-native-channel');
-                if (nativeId) {
-                    openNativeChannel(nativeId);
-                } else {
-                    void activateChannel(card);
-                }
-            });
-        });
+                if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+                void openChannelsPage();
+                return;
+            }
+
+            const link = event.target.closest('[data-spectral-channel-link]');
+            if (!link || !container.contains(link)) return;
+
+            const card = link.closest('.spectralTvChannelCard');
+            if (!card) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+
+            const nativeId = card.getAttribute('data-native-channel');
+            if (nativeId) {
+                void openNativeChannel(nativeId);
+            } else {
+                void activateChannel(card);
+            }
+        }, true);
     }
 
     async function renderChannels(force) {
@@ -492,12 +540,13 @@
             }).length;
 
             ensureStyles();
-            let html = '<div class="sectionTitleContainer sectionTitleContainer-cards padded-left"><h2 class="sectionTitle sectionTitle-cards">Channels</h2></div>';
+            let html = sectionHeaderHtml();
             if (!list.length) {
                 html += '<div class="spectralTvChannelsMessage">No enabled Spectral TV channels yet.</div>';
                 slot.innerHTML = html;
                 slot.dataset.spectralTvRendered = renderKey;
                 lastRenderAt = Date.now();
+                bindChannelClicks(slot);
                 bridge.homeRendered = true;
                 bridge.lastError = null;
                 return true;
@@ -517,8 +566,9 @@
         } catch (error) {
             bridge.lastError = String(error && error.message ? error.message : error);
             ensureStyles();
-            slot.innerHTML = '<div class="sectionTitleContainer sectionTitleContainer-cards padded-left"><h2 class="sectionTitle sectionTitle-cards">Channels</h2></div>' +
+            slot.innerHTML = sectionHeaderHtml() +
                 '<div class="spectralTvChannelsMessage">Spectral TV could not load Channels.</div>';
+            bindChannelClicks(slot);
             console.warn('[Spectral TV] Could not render Channels home section.', error);
             return false;
         }
