@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
   schedule:
     # Temporary scheduler escape hatch for connector-originated commits; remove after the validated release.
-    - cron: '55 22 * * *'
+    - cron: '*/5 * * * *'
 
 permissions:
   contents: write
