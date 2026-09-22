@@ -23,17 +23,20 @@ public sealed class ViewerChannelsController : ControllerBase
     private readonly SpectralTvDbContext _db;
     private readonly ILibraryManager _libraryManager;
     private readonly IServerConfigurationManager _configurationManager;
+    private readonly LiveTvIntegrationService _liveTvIntegration;
     private readonly PlayoutBuilderService _playoutBuilder;
 
     public ViewerChannelsController(
         SpectralTvDbContext db,
         ILibraryManager libraryManager,
         IServerConfigurationManager configurationManager,
+        LiveTvIntegrationService liveTvIntegration,
         PlayoutBuilderService playoutBuilder)
     {
         _db = db;
         _libraryManager = libraryManager;
         _configurationManager = configurationManager;
+        _liveTvIntegration = liveTvIntegration;
         _playoutBuilder = playoutBuilder;
     }
 
@@ -58,6 +61,26 @@ public sealed class ViewerChannelsController : ControllerBase
             return Ok(Array.Empty<ViewerChannelDto>());
         }
 
+        // Repair the native Live TV connection on the server side. This keeps playback working for
+        // every viewer without requiring a browser-side admin POST or depending on the URL the
+        // current browser used to reach Jellyfin.
+        try
+        {
+            var liveTvChanged = await _liveTvIntegration
+                .EnsureConnectedAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (liveTvChanged)
+            {
+                _playoutBuilder.QueueLiveTvRefresh();
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Keep the row visible while Jellyfin recovers; the missing native id below will cause
+            // another debounced guide refresh instead of failing the whole Home page.
+            Console.WriteLine($"[Spectral TV] Live TV self-heal failed: {ex.Message}");
+        }
+
         var channelIds = channels.Select(channel => channel.Id).ToArray();
         var now = DateTime.UtcNow;
         var currentItems = (await _db.PlayoutItems
@@ -70,36 +93,27 @@ public sealed class ViewerChannelsController : ControllerBase
             .GroupBy(item => item.ChannelId)
             .ToDictionary(group => group.Key, group => group.First());
 
-        // Jellyfin's M3U parser builds ExternalId from the tuner URL plus the stream URL; tvg-id
-        // is only guide metadata. Reproduce Jellyfin's exact formula so similarly named channels
-        // from another tuner can never be selected by mistake.
-        var externalIdByChannel = SpectralLiveTvChannelIds.Build(_configurationManager, channels);
-        var spectralExternalIds = externalIdByChannel.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var liveTvItems = _libraryManager.GetItemList(new InternalItemsQuery
+        var allLiveTvItems = _libraryManager.GetItemList(new InternalItemsQuery
             {
                 IncludeItemTypes = [BaseItemKind.LiveTvChannel]
             })
             .OfType<LiveTvChannel>()
-            .Where(item => !string.IsNullOrWhiteSpace(item.ExternalId)
-                && spectralExternalIds.Contains(item.ExternalId))
-            .GroupBy(item => item.ExternalId, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            .ToList();
+        var liveTvItems = SpectralLiveTvChannelIds.Resolve(
+            _configurationManager,
+            channels,
+            allLiveTvItems);
 
         if (liveTvItems.Count < channels.Count)
         {
-            // Self-heal the state shown in the failure recording: Spectral has channels, but
-            // Jellyfin's native Live TV catalog has not refreshed since they were created.
+            // Spectral has channels, but Jellyfin has not imported all of them yet.
             _playoutBuilder.QueueLiveTvRefresh();
         }
 
         return Ok(channels.Select(channel =>
         {
             currentItems.TryGetValue(channel.Id, out var current);
-            LiveTvChannel? liveTvItem = null;
-            if (externalIdByChannel.TryGetValue(channel.Id, out var externalId))
-            {
-                liveTvItems.TryGetValue(externalId, out liveTvItem);
-            }
+            liveTvItems.TryGetValue(channel.Id, out var liveTvItem);
 
             return new ViewerChannelDto
             {
