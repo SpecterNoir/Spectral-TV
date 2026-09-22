@@ -41,6 +41,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<Streaming.JellyfinFfmpegEncodingService>();
         serviceCollection.AddSingleton<StreamService>();
         serviceCollection.AddSingleton<Streaming.FfmpegCommandBuilder>();
+        serviceCollection.AddSingleton<LiveTvIntegrationService>();
         serviceCollection.AddSingleton<PlayoutBuilderService>();
 
         // Inject the Channels browser bridge into Jellyfin Web directly at request time.
