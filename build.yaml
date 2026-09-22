@@ -14,8 +14,8 @@ description: >
   independent; insert optional promos and bumpers; use ordinary Jellyfin clients through
   native Live TV and private per-user playlists; expose the actual enabled Spectral live channels
   as a Channels row that can be placed from Jellyfin's normal Home screen section settings through
-  Spectral TV's own Jellyfin Web integration; and connect the Spectral M3U/XMLTV sources to Jellyfin
-  Live TV from an explicit one-click admin workflow.
+  Spectral TV's own Jellyfin Web integration; and keep the Spectral M3U/XMLTV sources connected to
+  Jellyfin Live TV automatically through Jellyfin's own local server API.
 category: "LiveTV"
 assemblies:
   - "Jellyfin.Plugin.SpectralTV.dll"
@@ -47,6 +47,12 @@ artifacts:
   - "runtimes/linux-musl-arm64/native/libe_sqlite3.so"
   - "runtimes/linux-musl-arm/native/libe_sqlite3.so"
 changelog: |-
+  - Make Channels cards and the Channels heading real Jellyfin links with capture-phase click handling so Jellyfin's global itemAction/emby-itemscontainer handlers cannot swallow Spectral clicks
+  - Stop asking Jellyfin to fetch Spectral's M3U/XMLTV through the browser-facing QuickConnect/reverse-proxy address; the native tuner now uses Jellyfin's own loopback API URL, including the configured Jellyfin base path
+  - Automatically create or repair Spectral's native M3U tuner and XMLTV provider on the server when enabled channels exist, so viewers no longer need an elevated browser-side Connect Live TV request before a channel can open
+  - Resolve imported Jellyfin Live TV channels by the exact Spectral stream path as a fallback to Jellyfin's URL-hash ExternalId, making channel mapping survive tuner URL canonicalization and upgrades
+  - Keep loopback-generated M3U/XMLTV stream and logo URLs on loopback so a Synology QuickConnect/public URL cannot break Jellyfin's server-to-itself media path
+  - Add release tests that require a local-loopback native tuner, exercise a competing Jellyfin-like bubble click handler, and prove a previously unsynchronized card becomes a native channel and opens from one click
   - Keep the Channels row selected after refresh by storing its zero-based slot in Spectral's per-user configuration and reserving that Jellyfin Home slot with the supported Live TV value
   - Make a Synchronizing channel card connect Spectral's M3U/XMLTV sources, wait for Jellyfin to import the native channel, and then open it from the same click
   - Open already-synchronized channels directly on their real Jellyfin TV-channel page instead of relying on fragile delegated click handling
