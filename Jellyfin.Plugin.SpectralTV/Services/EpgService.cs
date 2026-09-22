@@ -253,6 +253,18 @@ public class EpgService
 
     public static string GetPublicBaseUrl(HttpRequest? request, IServerApplicationHost? appHost = null)
     {
+        // Jellyfin's own Spectral M3U/XMLTV tuner calls these endpoints over loopback. Keep those
+        // generated stream/logo URLs on loopback as well, even when the user configured a public
+        // URL or is browsing through Synology QuickConnect/reverse proxy.
+        if (request is not null
+            && appHost is not null
+            && IsServerLocalHost(request.Host.Host))
+        {
+            return appHost
+                .GetLocalApiUrl("127.0.0.1", Uri.UriSchemeHttp, appHost.HttpPort)
+                .TrimEnd('/');
+        }
+
         var configured = Plugin.Instance?.Configuration.PublicBaseUrl;
         if (!string.IsNullOrWhiteSpace(configured))
         {
@@ -286,6 +298,12 @@ public class EpgService
 
         return "http://localhost:8096";
     }
+
+    private static bool IsServerLocalHost(string? host)
+        => string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(host, "::1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(host, "[::1]", StringComparison.OrdinalIgnoreCase);
 
     private string GetLogoUrl(Channel channel, string? baseUrl = null)
     {
