@@ -75,24 +75,21 @@ public sealed class ChannelsHomeSectionResults
                 return Empty();
             }
 
-            var channelById = channels.ToDictionary(channel => channel.Id);
-            var channelByExternalId = SpectralLiveTvChannelIds
-                .Build(_configurationManager, channels)
-                .ToDictionary(pair => pair.Value, pair => channelById[pair.Key], StringComparer.OrdinalIgnoreCase);
-            if (channelByExternalId.Count == 0)
-            {
-                return Empty();
-            }
-
-            var items = _libraryManager.GetItemList(new InternalItemsQuery(user)
+            var nativeItems = _libraryManager.GetItemList(new InternalItemsQuery(user)
                 {
                     IncludeItemTypes = [BaseItemKind.LiveTvChannel]
                 })
                 .OfType<LiveTvChannel>()
-                .Where(item => !string.IsNullOrWhiteSpace(item.ExternalId)
-                    && channelByExternalId.ContainsKey(item.ExternalId))
-                .OrderBy(item => channelByExternalId[item.ExternalId].Number)
-                .Cast<BaseItem>()
+                .ToList();
+            var resolved = SpectralLiveTvChannelIds.Resolve(
+                _configurationManager,
+                channels,
+                nativeItems);
+
+            var items = channels
+                .Where(channel => resolved.ContainsKey(channel.Id))
+                .OrderBy(channel => channel.Number)
+                .Select(channel => (BaseItem)resolved[channel.Id])
                 .ToList();
 
             if (items.Count == 0)
