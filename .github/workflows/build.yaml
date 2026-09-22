@@ -15,6 +15,9 @@ on:
       - '**/*.md'
       - 'manifest.json'
   workflow_dispatch:
+  schedule:
+    # Temporary scheduler escape hatch for connector-originated commits; remove after the validated release.
+    - cron: '55 22 * * *'
 
 permissions:
   contents: write
@@ -123,7 +126,7 @@ jobs:
           path: ${{ steps.jprm.outputs.artifact }}
 
       - name: Publish rolling beta and Jellyfin manifest
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
