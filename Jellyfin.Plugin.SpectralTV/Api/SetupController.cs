@@ -1,10 +1,6 @@
 using Jellyfin.Plugin.SpectralTV.Services;
 using MediaBrowser.Common.Api;
-using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller;
-using MediaBrowser.Controller.Configuration;
-using MediaBrowser.Controller.LiveTv;
-using MediaBrowser.Model.LiveTv;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,29 +11,17 @@ namespace Jellyfin.Plugin.SpectralTV.Api;
 [Route("SpectralTV/api/setup")]
 public class SetupController : ControllerBase
 {
-    private const string SpectralTunerFriendlyName = "Spectral TV";
-    private const string M3uTunerType = "m3u";
-    private const string XmlTvProviderType = "xmltv";
-    private const string SpectralM3uSuffix = "/SpectralTV/iptv/channels.m3u";
-    private const string SpectralXmlTvSuffix = "/SpectralTV/iptv/epg.xml";
-
     private readonly IServerApplicationHost _appHost;
-    private readonly IServerConfigurationManager _configurationManager;
-    private readonly ITunerHostManager _tunerHostManager;
-    private readonly IListingsManager _listingsManager;
+    private readonly LiveTvIntegrationService _liveTvIntegration;
     private readonly PlayoutBuilderService _playoutBuilder;
 
     public SetupController(
         IServerApplicationHost appHost,
-        IServerConfigurationManager configurationManager,
-        ITunerHostManager tunerHostManager,
-        IListingsManager listingsManager,
+        LiveTvIntegrationService liveTvIntegration,
         PlayoutBuilderService playoutBuilder)
     {
         _appHost = appHost;
-        _configurationManager = configurationManager;
-        _tunerHostManager = tunerHostManager;
-        _listingsManager = listingsManager;
+        _liveTvIntegration = liveTvIntegration;
         _playoutBuilder = playoutBuilder;
     }
 
@@ -84,8 +68,8 @@ public class SetupController : ControllerBase
     }
 
     /// <summary>
-    /// Reports whether Jellyfin's native Live TV configuration currently contains the Spectral TV
-    /// M3U tuner and XMLTV provider. This never mutates Jellyfin configuration.
+    /// Reports whether Jellyfin's native Live TV configuration currently contains Spectral TV's
+    /// local-loopback M3U tuner and XMLTV provider.
     /// </summary>
     [HttpGet("livetv-status")]
     [Authorize(Policy = Policies.RequiresElevation)]
@@ -93,7 +77,7 @@ public class SetupController : ControllerBase
     {
         try
         {
-            return Ok(BuildLiveTvStatus());
+            return Ok(_liveTvIntegration.GetStatus());
         }
         catch (Exception ex)
         {
@@ -102,69 +86,24 @@ public class SetupController : ControllerBase
     }
 
     /// <summary>
-    /// Explicitly connects Spectral TV to Jellyfin's native Live TV system. The operation is
-    /// idempotent: it updates the tuner/provider previously recorded by Spectral TV or safely adopts
-    /// an existing entry that already points at Spectral TV. Unrelated Live TV entries are untouched.
+    /// Idempotently creates or repairs Spectral TV's native Live TV connection.
+    /// The tuner always points at Jellyfin's local API address; public/reverse-proxy URLs are
+    /// only exposed for external clients and are never required for the server to call itself.
     /// </summary>
     [HttpPost("livetv")]
     [Authorize(Policy = Policies.RequiresElevation)]
     public async Task<ActionResult<object>> ConnectLiveTv(CancellationToken cancellationToken)
     {
-        var plugin = Plugin.Instance;
-        if (plugin is null)
+        if (Plugin.Instance is null)
         {
             return NotFound();
         }
 
         try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var urls = BuildUrls();
-            var liveTv = GetLiveTvConfiguration();
-
-            var tuner = FindSpectralTuner(liveTv, urls.M3uUrl)
-                ?? new TunerHostInfo
-                {
-                    Type = M3uTunerType,
-                    FriendlyName = SpectralTunerFriendlyName,
-                    Url = urls.M3uUrl,
-                    TunerCount = 0,
-                    AllowStreamSharing = true,
-                    AllowHWTranscoding = true,
-                    ReadAtNativeFramerate = false
-                };
-
-            // Preserve any user-chosen tuner options when updating an existing Spectral entry.
-            tuner.Type = M3uTunerType;
-            tuner.FriendlyName = SpectralTunerFriendlyName;
-            tuner.Url = urls.M3uUrl;
-            tuner = await _tunerHostManager.SaveTunerHost(tuner, dataSourceChanged: false).ConfigureAwait(false);
-
-            cancellationToken.ThrowIfCancellationRequested();
-            liveTv = GetLiveTvConfiguration();
-            var listings = FindSpectralListingsProvider(liveTv, urls.XmlTvUrl)
-                ?? new ListingsProviderInfo
-                {
-                    Type = XmlTvProviderType,
-                    Path = urls.XmlTvUrl
-                };
-
-            // A Spectral XMLTV source belongs only to the Spectral M3U tuner. This prevents the
-            // provider from being considered for unrelated household tuners.
-            listings.Type = XmlTvProviderType;
-            listings.Path = urls.XmlTvUrl;
-            listings.EnableAllTuners = false;
-            listings.EnabledTuners = [tuner.Id];
-            listings = await _listingsManager
-                .SaveListingProvider(listings, validateLogin: false, validateListings: false)
-                .ConfigureAwait(false);
-
-            plugin.Configuration.LiveTvTunerHostId = tuner.Id;
-            plugin.Configuration.LiveTvListingsProviderId = listings.Id;
-            plugin.SaveConfiguration();
+            await _liveTvIntegration.EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
             _playoutBuilder.QueueLiveTvRefresh();
-
-            return Ok(BuildLiveTvStatus());
+            return Ok(_liveTvIntegration.GetStatus());
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -172,8 +111,6 @@ public class SetupController : ControllerBase
         }
         catch (Exception ex)
         {
-            // This endpoint is admin-triggered and request-scoped. Never allow a Live TV setup
-            // failure to become a plugin startup dependency or a Jellyfin host failure.
             return StatusCode(500, new
             {
                 message = "Jellyfin Live TV could not be connected. No unrelated tuner or guide entries were changed.",
@@ -182,121 +119,16 @@ public class SetupController : ControllerBase
         }
     }
 
-    private object BuildLiveTvStatus()
-    {
-        var urls = BuildUrls();
-        var liveTv = GetLiveTvConfiguration();
-        var tuner = FindSpectralTuner(liveTv, urls.M3uUrl);
-        var listings = FindSpectralListingsProvider(liveTv, urls.XmlTvUrl);
-
-        var tunerConfigured = tuner is not null
-            && string.Equals(tuner.Type, M3uTunerType, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(NormalizeUrl(tuner.Url), NormalizeUrl(urls.M3uUrl), StringComparison.OrdinalIgnoreCase);
-        var guideConfigured = listings is not null
-            && string.Equals(listings.Type, XmlTvProviderType, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(NormalizeUrl(listings.Path), NormalizeUrl(urls.XmlTvUrl), StringComparison.OrdinalIgnoreCase);
-        var guideLinkedToTuner = tuner is not null
-            && listings is not null
-            && (listings.EnableAllTuners
-                || (listings.EnabledTuners ?? Array.Empty<string>())
-                    .Contains(tuner.Id, StringComparer.OrdinalIgnoreCase));
-
-        return new
-        {
-            connected = tunerConfigured && guideConfigured && guideLinkedToTuner,
-            tunerConfigured,
-            guideConfigured,
-            guideLinkedToTuner,
-            tunerId = tuner?.Id,
-            listingsProviderId = listings?.Id,
-            m3uUrl = urls.M3uUrl,
-            xmlTvUrl = urls.XmlTvUrl
-        };
-    }
-
-    private LiveTvOptions GetLiveTvConfiguration()
-        => _configurationManager.GetConfiguration<LiveTvOptions>("livetv");
-
-    private TunerHostInfo? FindSpectralTuner(LiveTvOptions liveTv, string expectedUrl)
-    {
-        var tuners = liveTv.TunerHosts ?? Array.Empty<TunerHostInfo>();
-        var savedId = Plugin.Instance?.Configuration.LiveTvTunerHostId;
-        if (!string.IsNullOrWhiteSpace(savedId))
-        {
-            var saved = tuners.FirstOrDefault(t => string.Equals(t.Id, savedId, StringComparison.OrdinalIgnoreCase));
-            if (saved is not null && IsSpectralTunerCandidate(saved, expectedUrl))
-            {
-                return saved;
-            }
-        }
-
-        return tuners.FirstOrDefault(t => IsSpectralTunerCandidate(t, expectedUrl));
-    }
-
-    private ListingsProviderInfo? FindSpectralListingsProvider(LiveTvOptions liveTv, string expectedUrl)
-    {
-        var providers = liveTv.ListingProviders ?? Array.Empty<ListingsProviderInfo>();
-        var savedId = Plugin.Instance?.Configuration.LiveTvListingsProviderId;
-        if (!string.IsNullOrWhiteSpace(savedId))
-        {
-            var saved = providers.FirstOrDefault(p => string.Equals(p.Id, savedId, StringComparison.OrdinalIgnoreCase));
-            if (saved is not null && IsSpectralListingsCandidate(saved, expectedUrl))
-            {
-                return saved;
-            }
-        }
-
-        return providers.FirstOrDefault(p => IsSpectralListingsCandidate(p, expectedUrl));
-    }
-
-    private static bool IsSpectralTunerCandidate(TunerHostInfo tuner, string expectedUrl)
-    {
-        if (!string.Equals(tuner.Type, M3uTunerType, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var url = NormalizeUrl(tuner.Url);
-        return string.Equals(url, NormalizeUrl(expectedUrl), StringComparison.OrdinalIgnoreCase)
-            || url.EndsWith(SpectralM3uSuffix, StringComparison.OrdinalIgnoreCase)
-            || (string.Equals(tuner.FriendlyName, SpectralTunerFriendlyName, StringComparison.OrdinalIgnoreCase)
-                && url.Contains("/SpectralTV/", StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static bool IsSpectralListingsCandidate(ListingsProviderInfo provider, string expectedUrl)
-    {
-        if (!string.Equals(provider.Type, XmlTvProviderType, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var path = NormalizeUrl(provider.Path);
-        return string.Equals(path, NormalizeUrl(expectedUrl), StringComparison.OrdinalIgnoreCase)
-            || path.EndsWith(SpectralXmlTvSuffix, StringComparison.OrdinalIgnoreCase);
-    }
-
     private object BuildUrlResponse()
     {
-        var urls = BuildUrls();
+        var baseUrl = EpgService.GetPublicBaseUrl(Request, _appHost).TrimEnd('/');
         return new
         {
-            baseUrl = urls.BaseUrl,
-            m3u = urls.M3uUrl,
-            epg = urls.XmlTvUrl
+            baseUrl,
+            m3u = $"{baseUrl}{LiveTvIntegrationService.SpectralM3uSuffix}",
+            epg = $"{baseUrl}{LiveTvIntegrationService.SpectralXmlTvSuffix}"
         };
     }
-
-    private (string BaseUrl, string M3uUrl, string XmlTvUrl) BuildUrls()
-    {
-        var baseUrl = EpgService.GetPublicBaseUrl(Request, _appHost).TrimEnd('/');
-        return (
-            baseUrl,
-            $"{baseUrl}{SpectralM3uSuffix}",
-            $"{baseUrl}{SpectralXmlTvSuffix}");
-    }
-
-    private static string NormalizeUrl(string? value)
-        => (value ?? string.Empty).Trim().TrimEnd('/');
 }
 
 public class SetupSettingsRequest
