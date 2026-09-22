@@ -15,6 +15,7 @@ public class PlayoutBuilderService : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IGuideManager _guideManager;
+    private readonly LiveTvIntegrationService _liveTvIntegration;
     private readonly ILogger<PlayoutBuilderService> _logger;
     private readonly SemaphoreSlim _liveTvRefreshLock = new(1, 1);
     private int _liveTvRefreshQueued;
@@ -22,10 +23,12 @@ public class PlayoutBuilderService : BackgroundService
     public PlayoutBuilderService(
         IServiceScopeFactory scopeFactory,
         IGuideManager guideManager,
+        LiveTvIntegrationService liveTvIntegration,
         ILogger<PlayoutBuilderService> logger)
     {
         _scopeFactory = scopeFactory;
         _guideManager = guideManager;
+        _liveTvIntegration = liveTvIntegration;
         _logger = logger;
     }
 
@@ -104,6 +107,26 @@ public class PlayoutBuilderService : BackgroundService
         var channels = await db.Channels
             .Where(c => c.Enabled && (c.ContentType == Domain.ChannelContentType.TvShow || c.ContentType == Domain.ChannelContentType.Movie))
             .ToListAsync(cancellationToken);
+
+        if (channels.Count > 0)
+        {
+            try
+            {
+                var liveTvChanged = await _liveTvIntegration
+                    .EnsureConnectedAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                if (liveTvChanged)
+                {
+                    QueueLiveTvRefresh();
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Playout must continue even if Jellyfin's Live TV configuration is temporarily unavailable.
+                _logger.LogWarning(ex, "Could not self-heal Spectral TV's native Live TV connection");
+            }
+        }
+
         foreach (var channel in channels)
         {
             var stale = await db.PlayoutItems
